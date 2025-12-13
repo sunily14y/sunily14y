@@ -1,0 +1,132 @@
+{
+  "identity": {
+    "name": "PriceHistory.app Clone",
+    "persona": "E1: The Anti-AI Designer",
+    "tone": "Trustworthy, Precise, Data-Driven, Consumer-Friendly",
+    "aesthetic": "Soft Utility (Clean, rounded, precise)",
+    "theme_mode": "light"
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Manrope",
+      "body": "Outfit",
+      "mono": "JetBrains Mono"
+    },
+    "weights": {
+      "heading": "font-bold",
+      "body": "font-normal",
+      "mono": "font-medium"
+    },
+    "sizes": {
+      "h1": "text-5xl md:text-6xl tracking-tight",
+      "h2": "text-3xl md:text-4xl tracking-tight",
+      "h3": "text-2xl font-semibold",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-muted-foreground",
+      "price": "text-4xl font-mono tracking-tighter"
+    },
+    "installation": "Import fonts via Google Fonts in index.css: @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;600;800&family=Outfit:wght@300;400;500&display=swap');"
+  },
+  "colors": {
+    "palette": {
+      "primary": {
+        "name": "Deep Emerald",
+        "hex": "#064E3B",
+        "tailwind": "bg-[#064E3B] text-white"
+      },
+      "secondary": {
+        "name": "Slate",
+        "hex": "#64748B",
+        "tailwind": "bg-[#64748B] text-white"
+      },
+      "accent": {
+        "name": "Vivid Lime",
+        "hex": "#84CC16",
+        "tailwind": "bg-[#84CC16] text-black"
+      },
+      "background": {
+        "main": "#FFFFFF",
+        "subtle": "#F8FAFC"
+      },
+      "text": {
+        "main": "#0F172A",
+        "muted": "#64748B"
+      }
+    },
+    "usage_rules": {
+      "primary": "Use for main actions (Search button, Subscribe), Brand headers.",
+      "accent": "Use strictly for 'Price Drop' alerts, 'Lowest Price' badges, and high-urgency notifications.",
+      "background": "Keep main surfaces pure white. Use subtle grey (#F8FAFC) for section differentiation.",
+      "gradients": "Avoid gradients. Use solid, high-contrast colors."
+    }
+  },
+  "layout": {
+    "grid_system": {
+      "dashboard": "Bento Grid: grid-cols-1 md:grid-cols-3 gap-6. Main chart spans 2 cols, stats span 1.",
+      "product_page": "Two-column asymmetric: Left (Image/Info) 40%, Right (Chart/History) 60%."
+    },
+    "spacing": {
+      "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+      "section": "py-16 md:py-24",
+      "card_padding": "p-6 md:p-8"
+    },
+    "radius": {
+      "default": "rounded-xl",
+      "button": "rounded-full",
+      "card": "rounded-2xl"
+    }
+  },
+  "components": {
+    "buttons": {
+      "style": "Pill-shaped (rounded-full). High contrast. Hover: scale-105 transition-transform.",
+      "primary": "bg-[#064E3B] text-white hover:bg-[#064E3B]/90",
+      "secondary": "bg-white border border-slate-200 text-slate-900 hover:bg-slate-50"
+    },
+    "cards": {
+      "style": "Flat, bordered, no shadow (or very subtle).",
+      "classes": "bg-white border border-slate-100 rounded-2xl hover:border-slate-200 transition-colors"
+    },
+    "inputs": {
+      "style": "Large, clean, minimal borders.",
+      "classes": "h-14 rounded-xl border-slate-200 focus:ring-2 focus:ring-[#064E3B]/20 focus:border-[#064E3B] text-lg"
+    },
+    "charts": {
+      "library": "recharts",
+      "style": "Minimalist. Remove grid lines. Use curveMonotone. Tooltip: Custom minimal style.",
+      "colors": ["#064E3B", "#84CC16"]
+    }
+  },
+  "visual_enhancers": {
+    "shadows": "shadow-sm for cards, shadow-xl for floating elements (sticky nav).",
+    "borders": "1px solid #E2E8F0 (Slate 200).",
+    "glassmorphism": "Use backdrop-blur-md bg-white/80 for sticky headers.",
+    "micro_interactions": "All buttons must have active:scale-95. Lists should stagger fade-in."
+  },
+  "images": {
+    "hero_background": {
+      "url": "https://images.unsplash.com/photo-1741527043113-d066bfcfd842?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "alt": "Abstract 3D cubes white background",
+      "usage": "Use as a subtle background texture for the Hero section with low opacity (opacity-50) or blend mode."
+    },
+    "placeholders": {
+      "product": "https://placehold.co/400x400/f1f5f9/0f172a?text=Product",
+      "amazon_logo": "Use text 'Amazon' or an icon from lucide-react/react-icons if image fails.",
+      "flipkart_logo": "Use text 'Flipkart' or an icon."
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. INSTALL FONTS: Add the Google Fonts import to index.css immediately.",
+    "2. SETUP THEME: Ensure tailwind.config.js uses the primary color #064E3B as 'primary'.",
+    "3. BUILD HERO: Create a centered, Google-style search hero but with the 'Manrope' font and the abstract background image.",
+    "4. CHARTS: Install 'recharts' (npm install recharts). Create a reusable <PriceChart /> component.",
+    "5. ALERTS: Use 'sonner' for all notifications (Price drop subscribed, etc.).",
+    "6. NO AUTH: Skip login screens. Direct user to Dashboard or Product Page.",
+    "7. DATA-TESTID: Add data-testid to the Search Input ('search-input'), Search Button ('search-button'), and Subscribe Form ('subscribe-form')."
+  ],
+  "universal_guidelines": [
+    "Do not use gradients for backgrounds. Keep it flat and clean.",
+    "Use 2x more whitespace than you think is necessary.",
+    "Never center text in the 'Product Details' section; keep it left-aligned for readability.",
+    "Use 'JetBrains Mono' for ALL price numbers to convey data precision."
+  ]
+}
