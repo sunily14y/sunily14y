@@ -380,7 +380,7 @@ async def scrape_flipkart(url: str) -> dict:
                 if original_price > 0:
                     break
         
-        # Image
+        # Image - Try multiple approaches
         image_selectors = [
             'img.UCc1lI',  # New main product image selector
             'img.DByuf4.IZexXJ.jLEJ7H',
@@ -388,28 +388,46 @@ async def scrape_flipkart(url: str) -> dict:
             'img._396cs4',
             'img.q6DClP',
             '._3kidJX img',
-            'img[loading="eager"]'
+            'img[loading="eager"]',
+            'img._53J4C-'
         ]
         image_url = None
         for selector in image_selectors:
             image_elem = soup.select_one(selector)
             if image_elem:
                 src = image_elem.get('src', '')
-                if src and 'rukminim' in src and 'placeholder' not in src:
+                if src and 'rukminim' in src and 'placeholder' not in src.lower():
                     image_url = src if src.startswith('http') else f"https:{src}"
                     break
         
-        # Fallback: find any rukminim image with good size
+        # Fallback: find any rukminim image with product dimensions
         if not image_url:
             for img in soup.find_all('img'):
                 src = img.get('src', '')
-                if 'rukminim' in src and '/416/' in src:
+                if 'rukminim' in src and ('416' in src or '312' in src or '200' in src) and 'placeholder' not in src.lower():
                     image_url = src if src.startswith('http') else f"https:{src}"
                     break
         
-        # If still no image, use a generic smartphone placeholder
-        if not image_url or 'placeholder' in str(image_url):
-            image_url = "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=400&q=80"
+        # Try to extract from srcset
+        if not image_url:
+            for img in soup.find_all('img'):
+                srcset = img.get('srcset', '')
+                if 'rukminim' in srcset:
+                    # Get first URL from srcset
+                    first_src = srcset.split(',')[0].split(' ')[0]
+                    if first_src:
+                        image_url = first_src if first_src.startswith('http') else f"https:{first_src}"
+                        break
+        
+        # Try to find image URL in page data/scripts
+        if not image_url:
+            import re
+            img_pattern = re.search(r'(https://rukminim[^"\']+(?:416|312)[^"\']+\.(?:jpg|jpeg|png|webp))', str(soup))
+            if img_pattern:
+                image_url = img_pattern.group(1)
+        
+        # No placeholder - leave as None if no image found
+        # Frontend will show a product icon instead
         
         if current_price <= 0:
             raise HTTPException(status_code=400, detail="Could not extract price from Flipkart page. Please check if the URL is correct.")
