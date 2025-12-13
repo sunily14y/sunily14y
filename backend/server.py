@@ -397,10 +397,21 @@ async def track_product(product_data: ProductCreate, background_tasks: Backgroun
             
             price_values = [h['price'] for h in history] if history else [existing['current_price']]
             
+            # Handle datetime conversion
+            created_at = existing['created_at'] if isinstance(existing['created_at'], str) else existing['created_at'].isoformat()
+            updated_at = existing['updated_at'] if isinstance(existing['updated_at'], str) else existing['updated_at'].isoformat()
+            
             return ProductResponse(
-                **existing,
-                created_at=existing['created_at'] if isinstance(existing['created_at'], str) else existing['created_at'].isoformat(),
-                updated_at=existing['updated_at'] if isinstance(existing['updated_at'], str) else existing['updated_at'].isoformat(),
+                id=existing['id'],
+                url=existing['url'],
+                platform=existing['platform'],
+                name=existing['name'],
+                current_price=existing['current_price'],
+                original_price=existing.get('original_price'),
+                image_url=existing.get('image_url'),
+                currency=existing.get('currency', 'INR'),
+                created_at=created_at,
+                updated_at=updated_at,
                 lowest_price=min(price_values) if price_values else None,
                 highest_price=max(price_values) if price_values else None,
                 price_history=[{
