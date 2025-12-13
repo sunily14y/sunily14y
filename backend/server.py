@@ -159,15 +159,17 @@ async def fetch_with_brightdata(url: str) -> str:
             ) as response:
                 logger.info(f"Proxy response status: {response.status}")
                 html = await response.text()
+                html_lower = html.lower()
                 
                 # Check if we got valid HTML content (even if status is not 200)
-                if len(html) > 5000 and ('<html' in html.lower() or '<!doctype' in html.lower()):
+                # Flipkart sometimes returns 500 but with valid HTML
+                if len(html) > 5000 and ('<!doctype' in html_lower or '<html' in html_lower):
                     logger.info(f"Got valid HTML content, length: {len(html)}")
                     return html
-                elif response.status == 200:
+                elif response.status == 200 and len(html) > 1000:
                     return html
                 else:
-                    logger.error(f"Proxy error: {response.status} - {html[:200]}")
+                    logger.error(f"Invalid response: status={response.status}, length={len(html)}")
                     raise HTTPException(status_code=response.status, detail=f"Failed to fetch page: Status {response.status}")
         except aiohttp.ClientProxyConnectionError as e:
             logger.error(f"Proxy connection error: {str(e)}")
