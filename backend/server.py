@@ -348,9 +348,9 @@ async def scrape_flipkart(url: str) -> dict:
                     image_url = src if src.startswith('http') else f"https:{src}"
                     break
         
-        # If still no image, use a generic product placeholder
+        # If still no image, use a generic smartphone placeholder
         if not image_url or 'placeholder' in str(image_url):
-            image_url = "https://rukminim2.flixcart.com/image/416/416/placeholder.png"
+            image_url = "https://images.unsplash.com/photo-1592899677977-9c10ca588bbd?w=400&q=80"
         
         if current_price <= 0:
             raise HTTPException(status_code=400, detail="Could not extract price from Flipkart page. Please check if the URL is correct.")
