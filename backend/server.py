@@ -249,9 +249,9 @@ async def scrape_amazon(url: str) -> dict:
         raise HTTPException(status_code=400, detail=f"Failed to scrape Amazon: {str(e)}")
 
 async def scrape_flipkart(url: str) -> dict:
-    """Scrape product details from Flipkart using Bright Data"""
+    """Scrape product details from Flipkart using ScraperAPI"""
     try:
-        html = await fetch_with_brightdata(url)
+        html = await fetch_with_scraperapi(url)
         soup = BeautifulSoup(html, 'lxml')
         
         # Product name - multiple selectors for different page layouts
@@ -321,7 +321,7 @@ async def scrape_flipkart(url: str) -> dict:
                     break
         
         if current_price <= 0:
-            raise HTTPException(status_code=400, detail="Could not extract price from Flipkart page")
+            raise HTTPException(status_code=400, detail="Could not extract price from Flipkart page. Please check if the URL is correct.")
         
         return {
             'name': name[:200] if name else "Unknown Product",
