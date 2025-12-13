@@ -92,9 +92,8 @@ class ProductResponse(BaseModel):
 
 # ============= Scraper Service =============
 
-# Bright Data API Configuration
+# Bright Data Configuration
 BRIGHTDATA_API_KEY = os.environ.get('BRIGHTDATA_API_KEY', '')
-BRIGHTDATA_API_URL = "https://api.brightdata.com/request"
 
 def detect_platform(url: str) -> str:
     """Detect e-commerce platform from URL"""
@@ -117,41 +116,52 @@ def clean_price(price_text: str) -> float:
         return 0.0
 
 async def fetch_with_brightdata(url: str) -> str:
-    """Fetch URL content using Bright Data Web Unlocker API"""
+    """Fetch URL content using Bright Data Proxy"""
     if not BRIGHTDATA_API_KEY:
         raise HTTPException(status_code=500, detail="Bright Data API key not configured")
     
+    # Use Bright Data's Web Unlocker proxy
+    # Format: http://brd-customer-CUSTOMER_ID-zone-ZONE:PASSWORD@brd.superproxy.io:PORT
+    # The API key provided might be a direct proxy password
+    proxy_url = f"http://brd-customer-hl_4fe3a556-zone-web_unlocker:{BRIGHTDATA_API_KEY}@brd.superproxy.io:22225"
+    
     headers = {
-        "Authorization": f"Bearer {BRIGHTDATA_API_KEY}",
-        "Content-Type": "application/json"
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
     }
     
-    payload = {
-        "zone": "web_unlocker1",
-        "url": url,
-        "format": "raw",
-        "method": "GET",
-        "country": "in"  # India for Amazon.in and Flipkart
-    }
-    
-    async with aiohttp.ClientSession() as session:
+    connector = aiohttp.TCPConnector(ssl=False)
+    async with aiohttp.ClientSession(connector=connector) as session:
         try:
-            async with session.post(
-                BRIGHTDATA_API_URL, 
-                headers=headers, 
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=60)
+            # Try direct fetch with Bright Data proxy
+            async with session.get(
+                url, 
+                headers=headers,
+                proxy=proxy_url,
+                timeout=aiohttp.ClientTimeout(total=60),
+                allow_redirects=True
             ) as response:
                 if response.status == 200:
                     return await response.text()
                 else:
-                    error_text = await response.text()
-                    logger.error(f"Bright Data API error: {response.status} - {error_text}")
-                    raise HTTPException(status_code=response.status, detail=f"Bright Data API error: {error_text}")
+                    logger.warning(f"Bright Data proxy returned status {response.status}")
+                    # Fall back to direct request
+                    async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as direct_response:
+                        if direct_response.status == 200:
+                            return await direct_response.text()
+                        raise HTTPException(status_code=direct_response.status, detail=f"Failed to fetch page: {direct_response.status}")
+        except aiohttp.ClientProxyConnectionError as e:
+            logger.warning(f"Proxy connection failed, trying direct: {str(e)}")
+            # Fall back to direct request without proxy
+            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
+                if response.status == 200:
+                    return await response.text()
+                raise HTTPException(status_code=response.status, detail=f"Failed to fetch page: {response.status}")
         except asyncio.TimeoutError:
             raise HTTPException(status_code=408, detail="Request timeout while fetching page")
         except Exception as e:
-            logger.error(f"Bright Data fetch error: {str(e)}")
+            logger.error(f"Fetch error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to fetch page: {str(e)}")
 
 async def scrape_amazon(url: str) -> dict:
