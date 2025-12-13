@@ -237,7 +237,7 @@ const HomePage = () => {
                       </Badge>
                       <div className="flex items-center gap-2">
                         <a
-                          href={product.url}
+                          href={product.affiliate_url || product.url}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
