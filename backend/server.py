@@ -166,9 +166,9 @@ async def fetch_with_scraperapi(url: str) -> str:
             raise HTTPException(status_code=500, detail=f"Failed to fetch page: {str(e)}")
 
 async def scrape_amazon(url: str) -> dict:
-    """Scrape product details from Amazon using Bright Data"""
+    """Scrape product details from Amazon using ScraperAPI"""
     try:
-        html = await fetch_with_brightdata(url)
+        html = await fetch_with_scraperapi(url)
         soup = BeautifulSoup(html, 'lxml')
         
         # Product name
@@ -219,18 +219,20 @@ async def scrape_amazon(url: str) -> dict:
         image_elem = soup.select_one('#landingImage, #imgBlkFront, .a-dynamic-image, #main-image')
         image_url = None
         if image_elem:
-            image_url = image_elem.get('src') or image_elem.get('data-old-hires') or image_elem.get('data-a-dynamic-image')
-            if image_url and image_url.startswith('{'):
-                # Parse JSON-like data-a-dynamic-image
-                import json
-                try:
-                    img_data = json.loads(image_url)
-                    image_url = list(img_data.keys())[0] if img_data else None
-                except:
-                    image_url = None
+            image_url = image_elem.get('src') or image_elem.get('data-old-hires')
+            # Handle data-a-dynamic-image JSON
+            if not image_url or image_url.startswith('{'):
+                dyn_img = image_elem.get('data-a-dynamic-image')
+                if dyn_img:
+                    try:
+                        import json
+                        img_data = json.loads(dyn_img)
+                        image_url = list(img_data.keys())[0] if img_data else None
+                    except:
+                        pass
         
         if current_price <= 0:
-            raise HTTPException(status_code=400, detail="Could not extract price from Amazon page")
+            raise HTTPException(status_code=400, detail="Could not extract price from Amazon page. Please check if the URL is correct.")
         
         return {
             'name': name[:200] if name else "Unknown Product",
