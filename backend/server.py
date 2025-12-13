@@ -92,8 +92,27 @@ class ProductResponse(BaseModel):
 
 # ============= Scraper Service =============
 
-# Bright Data Configuration
+# Bright Data Configuration  
 BRIGHTDATA_API_KEY = os.environ.get('BRIGHTDATA_API_KEY', '')
+BRIGHTDATA_ZONE = os.environ.get('BRIGHTDATA_ZONE', 'serp_api1')  # User needs to create this zone
+
+# Browser-like headers for scraping
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive',
+    'Cache-Control': 'max-age=0',
+    'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+}
 
 def detect_platform(url: str) -> str:
     """Detect e-commerce platform from URL"""
@@ -116,50 +135,61 @@ def clean_price(price_text: str) -> float:
         return 0.0
 
 async def fetch_with_brightdata(url: str) -> str:
-    """Fetch URL content using Bright Data Proxy"""
-    if not BRIGHTDATA_API_KEY:
-        raise HTTPException(status_code=500, detail="Bright Data API key not configured")
+    """Fetch URL content using Bright Data Web Unlocker API"""
     
-    # Use Bright Data's Web Unlocker proxy
-    # Format: http://brd-customer-CUSTOMER_ID-zone-ZONE:PASSWORD@brd.superproxy.io:PORT
-    # The API key provided might be a direct proxy password
-    proxy_url = f"http://brd-customer-hl_4fe3a556-zone-web_unlocker:{BRIGHTDATA_API_KEY}@brd.superproxy.io:22225"
+    # Try Bright Data API first
+    if BRIGHTDATA_API_KEY:
+        api_headers = {
+            "Authorization": f"Bearer {BRIGHTDATA_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "zone": BRIGHTDATA_ZONE,
+            "url": url,
+            "format": "raw",
+            "country": "in"
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(
+                    "https://api.brightdata.com/request",
+                    headers=api_headers,
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=60)
+                ) as response:
+                    if response.status == 200:
+                        return await response.text()
+                    else:
+                        error_text = await response.text()
+                        logger.warning(f"Bright Data API error: {response.status} - {error_text[:200]}")
+            except Exception as e:
+                logger.warning(f"Bright Data API failed: {str(e)}")
     
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-    }
-    
+    # Fallback to direct request with enhanced headers
     connector = aiohttp.TCPConnector(ssl=False)
     async with aiohttp.ClientSession(connector=connector) as session:
         try:
-            # Try direct fetch with Bright Data proxy
             async with session.get(
-                url, 
-                headers=headers,
-                proxy=proxy_url,
-                timeout=aiohttp.ClientTimeout(total=60),
+                url,
+                headers=HEADERS,
+                timeout=aiohttp.ClientTimeout(total=30),
                 allow_redirects=True
             ) as response:
                 if response.status == 200:
-                    return await response.text()
-                else:
-                    logger.warning(f"Bright Data proxy returned status {response.status}")
-                    # Fall back to direct request
-                    async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as direct_response:
-                        if direct_response.status == 200:
-                            return await direct_response.text()
-                        raise HTTPException(status_code=direct_response.status, detail=f"Failed to fetch page: {direct_response.status}")
-        except aiohttp.ClientProxyConnectionError as e:
-            logger.warning(f"Proxy connection failed, trying direct: {str(e)}")
-            # Fall back to direct request without proxy
-            async with session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as response:
-                if response.status == 200:
-                    return await response.text()
-                raise HTTPException(status_code=response.status, detail=f"Failed to fetch page: {response.status}")
+                    html = await response.text()
+                    # Check if we got a valid page (not a captcha/block page)
+                    if len(html) > 5000:
+                        return html
+                raise HTTPException(
+                    status_code=response.status, 
+                    detail=f"Could not fetch page. The site may be blocking requests. Status: {response.status}"
+                )
         except asyncio.TimeoutError:
             raise HTTPException(status_code=408, detail="Request timeout while fetching page")
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Fetch error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to fetch page: {str(e)}")
