@@ -506,6 +506,7 @@ async def track_product(product_data: ProductCreate, background_tasks: Backgroun
             return ProductResponse(
                 id=existing['id'],
                 url=existing['url'],
+                affiliate_url=generate_affiliate_url(existing['url'], existing['platform']),
                 platform=existing['platform'],
                 name=existing['name'],
                 current_price=existing['current_price'],
