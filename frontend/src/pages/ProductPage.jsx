@@ -205,7 +205,7 @@ const ProductPage = () => {
                     {product.platform}
                   </Badge>
                   <a
-                    href={product.url}
+                    href={product.affiliate_url || product.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 text-sm text-[#064E3B] hover:underline"
