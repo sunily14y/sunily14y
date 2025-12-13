@@ -261,24 +261,27 @@ async def scrape_flipkart(url: str) -> dict:
             'h1._9E25nV',
             '.yhB1nd span',
             'h1.yhB1nd',
-            '.G6XhRU'
+            '.G6XhRU',
+            'h1 span'
         ]
         name = None
         for selector in name_selectors:
             name_elem = soup.select_one(selector)
             if name_elem:
                 name = name_elem.get_text(strip=True)
-                if name:
+                if name and len(name) > 5:
                     break
         
-        # Price - multiple selectors
+        # Price - multiple selectors (Flipkart changes class names frequently)
         price_selectors = [
             'div.Nx9bqj.CxhGGd',
+            'div.hZ3P6w.bnqy13',  # New selector
             'div._30jeq3._16Jk6d',
             'div._30jeq3',
             '.CEmiEU div',
             'div.Nx9bqj',
-            '._25b18c div._30jeq3'
+            '._25b18c div._30jeq3',
+            'div.bnqy13'  # Alternative new selector
         ]
         
         current_price = 0.0
@@ -289,13 +292,27 @@ async def scrape_flipkart(url: str) -> dict:
                 if current_price > 0:
                     break
         
+        # If still no price, try finding any element with ₹ that looks like a main price
+        if current_price <= 0:
+            for elem in soup.find_all(string=lambda t: t and '₹' in t and ',' in t):
+                price_text = elem.strip()
+                if price_text.startswith('₹') and len(price_text) < 15:
+                    parent_classes = elem.parent.get('class', [])
+                    # Skip if it's clearly not a main price (cashback, discount text)
+                    if not any(word in str(parent_classes).lower() for word in ['cashback', 'discount', 'offer']):
+                        current_price = clean_price(price_text)
+                        if current_price > 1000:  # Reasonable product price
+                            break
+        
         # Original price (MRP)
         original_price = None
         mrp_selectors = [
             'div.yRaY8j.A6+E6v',
+            'div.kRYCnD.yHYOcc',  # New selector
             'div._3I9_wc._2p6lqe',
             '.yRaY8j',
-            'div._2p6lqe'
+            'div._2p6lqe',
+            'div.yHYOcc'
         ]
         for selector in mrp_selectors:
             mrp_elem = soup.select_one(selector)
@@ -310,14 +327,15 @@ async def scrape_flipkart(url: str) -> dict:
             'img._396cs4._2amPTt._3qGmMb',
             'img._396cs4',
             'img.q6DClP',
-            '._3kidJX img'
+            '._3kidJX img',
+            'img[loading="eager"]'
         ]
         image_url = None
         for selector in image_selectors:
             image_elem = soup.select_one(selector)
             if image_elem:
                 image_url = image_elem.get('src')
-                if image_url:
+                if image_url and 'rukminim' in image_url:
                     break
         
         if current_price <= 0:
