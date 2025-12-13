@@ -243,7 +243,7 @@ const ProductPage = () => {
                 <Button
                   onClick={handleRefresh}
                   disabled={isRefreshing}
-                  className="w-full rounded-full bg-[#064E3B] hover:bg-[#064E3B]/90 text-white"
+                  className="w-full rounded-full bg-[#064E3B] hover:bg-[#064E3B]/90 text-white mb-3"
                   data-testid="refresh-button"
                 >
                   {isRefreshing ? (
@@ -258,6 +258,17 @@ const ProductPage = () => {
                     </>
                   )}
                 </Button>
+
+                <a
+                  href={product.affiliate_url || product.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-3 px-6 bg-[#84CC16] hover:bg-[#65a30d] text-black font-bold rounded-full text-center transition-all flex items-center justify-center gap-2 text-lg shadow-lg hover:shadow-xl"
+                  data-testid="get-deal-button"
+                >
+                  <ExternalLink className="h-5 w-5" />
+                  Get Deal on {product.platform === 'amazon' ? 'Amazon' : 'Flipkart'}
+                </a>
               </CardContent>
             </Card>
           </div>
