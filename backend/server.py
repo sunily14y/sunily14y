@@ -554,6 +554,7 @@ async def track_product(product_data: ProductCreate, background_tasks: Backgroun
         return ProductResponse(
             id=product.id,
             url=product.url,
+            affiliate_url=generate_affiliate_url(product.url, product.platform),
             platform=product.platform,
             name=product.name,
             current_price=product.current_price,
