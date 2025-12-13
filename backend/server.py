@@ -92,40 +92,9 @@ class ProductResponse(BaseModel):
 
 # ============= Scraper Service =============
 
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Cache-Control': 'max-age=0',
-    'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-    'Sec-Ch-Ua-Mobile': '?0',
-    'Sec-Ch-Ua-Platform': '"Windows"',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-    'Upgrade-Insecure-Requests': '1',
-}
-
-# Demo products for testing when scraping fails
-DEMO_PRODUCTS = {
-    'amazon': {
-        'name': 'Sample Product from Amazon',
-        'current_price': 24999.0,
-        'original_price': 34999.0,
-        'image_url': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
-        'platform': 'amazon'
-    },
-    'flipkart': {
-        'name': 'Sample Product from Flipkart', 
-        'current_price': 18999.0,
-        'original_price': 29999.0,
-        'image_url': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
-        'platform': 'flipkart'
-    }
-}
+# Bright Data API Configuration
+BRIGHTDATA_API_KEY = os.environ.get('BRIGHTDATA_API_KEY', '')
+BRIGHTDATA_API_URL = "https://api.brightdata.com/request"
 
 def detect_platform(url: str) -> str:
     """Detect e-commerce platform from URL"""
@@ -147,57 +116,213 @@ def clean_price(price_text: str) -> float:
     except ValueError:
         return 0.0
 
-async def scrape_amazon(url: str) -> dict:
-    """Scrape product details from Amazon"""
-    connector = aiohttp.TCPConnector(ssl=False)
-    async with aiohttp.ClientSession(connector=connector) as session:
+async def fetch_with_brightdata(url: str) -> str:
+    """Fetch URL content using Bright Data Web Unlocker API"""
+    if not BRIGHTDATA_API_KEY:
+        raise HTTPException(status_code=500, detail="Bright Data API key not configured")
+    
+    headers = {
+        "Authorization": f"Bearer {BRIGHTDATA_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "zone": "web_unlocker1",
+        "url": url,
+        "format": "raw",
+        "method": "GET",
+        "country": "in"  # India for Amazon.in and Flipkart
+    }
+    
+    async with aiohttp.ClientSession() as session:
         try:
-            async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=30), allow_redirects=True) as response:
-                if response.status != 200:
-                    logger.warning(f"Amazon returned status {response.status}, using demo data")
-                    # Return demo data with actual URL
-                    demo = DEMO_PRODUCTS['amazon'].copy()
-                    demo['name'] = f"Product from Amazon (Demo) - {url.split('/')[-1][:30]}"
-                    return demo
-                    
-                html = await response.text()
-                soup = BeautifulSoup(html, 'lxml')
-                
-                # Product name
-                name_elem = soup.select_one('#productTitle')
-                name = name_elem.get_text(strip=True) if name_elem else None
-                
-                # If we can't get the name, site may be blocking us
-                if not name:
-                    logger.warning("Could not extract Amazon product name, using demo data")
-                    demo = DEMO_PRODUCTS['amazon'].copy()
-                    demo['name'] = f"Product from Amazon (Demo) - {url.split('/')[-1][:30]}"
-                    return demo
-                
-                # Price - try multiple selectors
-                price_selectors = [
-                    '.a-price-whole',
-                    '#priceblock_ourprice',
-                    '#priceblock_dealprice',
-                    '.a-price .a-offscreen',
-                    '#corePrice_feature_div .a-offscreen',
-                    '.apexPriceToPay .a-offscreen'
-                ]
-                
-                current_price = 0.0
-                for selector in price_selectors:
-                    price_elem = soup.select_one(selector)
-                    if price_elem:
-                        current_price = clean_price(price_elem.get_text())
-                        if current_price > 0:
-                            break
-                
-                # Original price (MRP)
-                original_price = None
-                mrp_selectors = [
-                    '.a-price.a-text-price .a-offscreen',
-                    '#listPrice',
-                    '.basisPrice .a-offscreen'
+            async with session.post(
+                BRIGHTDATA_API_URL, 
+                headers=headers, 
+                json=payload,
+                timeout=aiohttp.ClientTimeout(total=60)
+            ) as response:
+                if response.status == 200:
+                    return await response.text()
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Bright Data API error: {response.status} - {error_text}")
+                    raise HTTPException(status_code=response.status, detail=f"Bright Data API error: {error_text}")
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=408, detail="Request timeout while fetching page")
+        except Exception as e:
+            logger.error(f"Bright Data fetch error: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to fetch page: {str(e)}")
+
+async def scrape_amazon(url: str) -> dict:
+    """Scrape product details from Amazon using Bright Data"""
+    try:
+        html = await fetch_with_brightdata(url)
+        soup = BeautifulSoup(html, 'lxml')
+        
+        # Product name
+        name_elem = soup.select_one('#productTitle')
+        name = name_elem.get_text(strip=True) if name_elem else None
+        
+        if not name:
+            # Try alternative selectors
+            name_elem = soup.select_one('h1 span#productTitle, h1.product-title-word-break')
+            name = name_elem.get_text(strip=True) if name_elem else "Unknown Product"
+        
+        # Price - try multiple selectors
+        price_selectors = [
+            '.a-price-whole',
+            '#priceblock_ourprice',
+            '#priceblock_dealprice', 
+            '.a-price .a-offscreen',
+            '#corePrice_feature_div .a-offscreen',
+            '.apexPriceToPay .a-offscreen',
+            '#corePriceDisplay_desktop_feature_div .a-price .a-offscreen',
+            '.reinventPricePriceToPayMargin .a-offscreen'
+        ]
+        
+        current_price = 0.0
+        for selector in price_selectors:
+            price_elem = soup.select_one(selector)
+            if price_elem:
+                current_price = clean_price(price_elem.get_text())
+                if current_price > 0:
+                    break
+        
+        # Original price (MRP)
+        original_price = None
+        mrp_selectors = [
+            '.a-price.a-text-price .a-offscreen',
+            '#listPrice',
+            '.basisPrice .a-offscreen',
+            '.a-text-strike .a-offscreen'
+        ]
+        for selector in mrp_selectors:
+            mrp_elem = soup.select_one(selector)
+            if mrp_elem:
+                original_price = clean_price(mrp_elem.get_text())
+                if original_price > 0:
+                    break
+        
+        # Image
+        image_elem = soup.select_one('#landingImage, #imgBlkFront, .a-dynamic-image, #main-image')
+        image_url = None
+        if image_elem:
+            image_url = image_elem.get('src') or image_elem.get('data-old-hires') or image_elem.get('data-a-dynamic-image')
+            if image_url and image_url.startswith('{'):
+                # Parse JSON-like data-a-dynamic-image
+                import json
+                try:
+                    img_data = json.loads(image_url)
+                    image_url = list(img_data.keys())[0] if img_data else None
+                except:
+                    image_url = None
+        
+        if current_price <= 0:
+            raise HTTPException(status_code=400, detail="Could not extract price from Amazon page")
+        
+        return {
+            'name': name[:200] if name else "Unknown Product",
+            'current_price': current_price,
+            'original_price': original_price,
+            'image_url': image_url,
+            'platform': 'amazon'
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Amazon scraping error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to scrape Amazon: {str(e)}")
+
+async def scrape_flipkart(url: str) -> dict:
+    """Scrape product details from Flipkart using Bright Data"""
+    try:
+        html = await fetch_with_brightdata(url)
+        soup = BeautifulSoup(html, 'lxml')
+        
+        # Product name - multiple selectors for different page layouts
+        name_selectors = [
+            'span.VU-ZEz',
+            'span.B_NuCI', 
+            'h1._9E25nV',
+            '.yhB1nd span',
+            'h1.yhB1nd',
+            '.G6XhRU'
+        ]
+        name = None
+        for selector in name_selectors:
+            name_elem = soup.select_one(selector)
+            if name_elem:
+                name = name_elem.get_text(strip=True)
+                if name:
+                    break
+        
+        # Price - multiple selectors
+        price_selectors = [
+            'div.Nx9bqj.CxhGGd',
+            'div._30jeq3._16Jk6d',
+            'div._30jeq3',
+            '.CEmiEU div',
+            'div.Nx9bqj',
+            '._25b18c div._30jeq3'
+        ]
+        
+        current_price = 0.0
+        for selector in price_selectors:
+            price_elem = soup.select_one(selector)
+            if price_elem:
+                current_price = clean_price(price_elem.get_text())
+                if current_price > 0:
+                    break
+        
+        # Original price (MRP)
+        original_price = None
+        mrp_selectors = [
+            'div.yRaY8j.A6+E6v',
+            'div._3I9_wc._2p6lqe',
+            '.yRaY8j',
+            'div._2p6lqe'
+        ]
+        for selector in mrp_selectors:
+            mrp_elem = soup.select_one(selector)
+            if mrp_elem:
+                original_price = clean_price(mrp_elem.get_text())
+                if original_price > 0:
+                    break
+        
+        # Image
+        image_selectors = [
+            'img.DByuf4.IZexXJ.jLEJ7H',
+            'img._396cs4._2amPTt._3qGmMb',
+            'img._396cs4',
+            'img.q6DClP',
+            '._3kidJX img'
+        ]
+        image_url = None
+        for selector in image_selectors:
+            image_elem = soup.select_one(selector)
+            if image_elem:
+                image_url = image_elem.get('src')
+                if image_url:
+                    break
+        
+        if current_price <= 0:
+            raise HTTPException(status_code=400, detail="Could not extract price from Flipkart page")
+        
+        return {
+            'name': name[:200] if name else "Unknown Product",
+            'current_price': current_price,
+            'original_price': original_price,
+            'image_url': image_url,
+            'platform': 'flipkart'
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Flipkart scraping error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Failed to scrape Flipkart: {str(e)}")
                 ]
                 for selector in mrp_selectors:
                     mrp_elem = soup.select_one(selector)
