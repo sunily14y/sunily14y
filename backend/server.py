@@ -92,29 +92,9 @@ class ProductResponse(BaseModel):
 
 # ============= Scraper Service =============
 
-# Bright Data Proxy Configuration  
-BRIGHTDATA_PROXY_HOST = os.environ.get('BRIGHTDATA_PROXY_HOST', 'brd.superproxy.io')
-BRIGHTDATA_PROXY_PORT = os.environ.get('BRIGHTDATA_PROXY_PORT', '33335')
-BRIGHTDATA_PROXY_USER = os.environ.get('BRIGHTDATA_PROXY_USER', '')
-BRIGHTDATA_PROXY_PASS = os.environ.get('BRIGHTDATA_PROXY_PASS', '')
-
-# Browser-like headers for scraping
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-IN,en-GB;q=0.9,en-US;q=0.8,en;q=0.7',
-    'Accept-Encoding': 'gzip, deflate, br',
-    'Connection': 'keep-alive',
-    'Cache-Control': 'max-age=0',
-    'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
-    'Sec-Ch-Ua-Mobile': '?0',
-    'Sec-Ch-Ua-Platform': '"Windows"',
-    'Sec-Fetch-Dest': 'document',
-    'Sec-Fetch-Mode': 'navigate',
-    'Sec-Fetch-Site': 'none',
-    'Sec-Fetch-User': '?1',
-    'Upgrade-Insecure-Requests': '1',
-}
+# ScraperAPI Configuration
+SCRAPERAPI_KEY = os.environ.get('SCRAPERAPI_KEY', '')
+SCRAPERAPI_URL = "http://api.scraperapi.com"
 
 def detect_platform(url: str) -> str:
     """Detect e-commerce platform from URL"""
@@ -136,50 +116,53 @@ def clean_price(price_text: str) -> float:
     except ValueError:
         return 0.0
 
-async def fetch_with_brightdata(url: str) -> str:
-    """Fetch URL content using Bright Data Proxy"""
+async def fetch_with_scraperapi(url: str) -> str:
+    """Fetch URL content using ScraperAPI"""
     
-    if not BRIGHTDATA_PROXY_USER or not BRIGHTDATA_PROXY_PASS:
-        raise HTTPException(status_code=500, detail="Bright Data proxy credentials not configured")
+    if not SCRAPERAPI_KEY:
+        raise HTTPException(status_code=500, detail="ScraperAPI key not configured")
     
-    # Build proxy URL
-    proxy_url = f"http://{BRIGHTDATA_PROXY_USER}:{BRIGHTDATA_PROXY_PASS}@{BRIGHTDATA_PROXY_HOST}:{BRIGHTDATA_PROXY_PORT}"
+    # Build ScraperAPI URL with parameters
+    params = {
+        'api_key': SCRAPERAPI_KEY,
+        'url': url,
+        'render': 'true',  # JavaScript rendering for dynamic content
+        'country_code': 'in'  # India for Amazon.in and Flipkart
+    }
     
-    logger.info(f"Fetching {url} via Bright Data proxy")
+    logger.info(f"Fetching {url} via ScraperAPI")
     
-    connector = aiohttp.TCPConnector(ssl=False)
-    async with aiohttp.ClientSession(connector=connector) as session:
+    async with aiohttp.ClientSession() as session:
         try:
             async with session.get(
-                url,
-                headers=HEADERS,
-                proxy=proxy_url,
-                timeout=aiohttp.ClientTimeout(total=60),
-                allow_redirects=True
+                SCRAPERAPI_URL,
+                params=params,
+                timeout=aiohttp.ClientTimeout(total=90)
             ) as response:
-                logger.info(f"Proxy response status: {response.status}")
-                html = await response.text()
-                html_lower = html.lower()
+                logger.info(f"ScraperAPI response status: {response.status}")
                 
-                # Check if we got valid HTML content (even if status is not 200)
-                # Flipkart sometimes returns 500 but with valid HTML
-                if len(html) > 5000 and ('<!doctype' in html_lower or '<html' in html_lower):
-                    logger.info(f"Got valid HTML content, length: {len(html)}")
-                    return html
-                elif response.status == 200 and len(html) > 1000:
-                    return html
+                if response.status == 200:
+                    html = await response.text()
+                    if len(html) > 1000:
+                        logger.info(f"Got HTML content, length: {len(html)}")
+                        return html
+                    else:
+                        raise HTTPException(status_code=400, detail="Received incomplete page content")
+                elif response.status == 403:
+                    raise HTTPException(status_code=403, detail="Access denied by target website")
+                elif response.status == 429:
+                    raise HTTPException(status_code=429, detail="API rate limit exceeded. Please try again later.")
                 else:
-                    logger.error(f"Invalid response: status={response.status}, length={len(html)}")
-                    raise HTTPException(status_code=response.status, detail=f"Failed to fetch page: Status {response.status}")
-        except aiohttp.ClientProxyConnectionError as e:
-            logger.error(f"Proxy connection error: {str(e)}")
-            raise HTTPException(status_code=503, detail=f"Proxy connection failed: {str(e)}")
+                    error_text = await response.text()
+                    logger.error(f"ScraperAPI error: {response.status} - {error_text[:200]}")
+                    raise HTTPException(status_code=response.status, detail=f"Failed to fetch page: {error_text[:100]}")
+                    
         except asyncio.TimeoutError:
-            raise HTTPException(status_code=408, detail="Request timeout while fetching page")
+            raise HTTPException(status_code=408, detail="Request timeout. The page is taking too long to load.")
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Fetch error: {str(e)}")
+            logger.error(f"ScraperAPI fetch error: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to fetch page: {str(e)}")
 
 async def scrape_amazon(url: str) -> dict:
