@@ -96,6 +96,10 @@ class ProductResponse(BaseModel):
 SCRAPERAPI_KEY = os.environ.get('SCRAPERAPI_KEY', '')
 SCRAPERAPI_URL = "http://api.scraperapi.com"
 
+# Affiliate Configuration
+AMAZON_AFFILIATE_TAG = os.environ.get('AMAZON_AFFILIATE_TAG', '')
+FLIPKART_AFFILIATE_ID = os.environ.get('FLIPKART_AFFILIATE_ID', '')
+
 def detect_platform(url: str) -> str:
     """Detect e-commerce platform from URL"""
     if 'amazon' in url.lower():
