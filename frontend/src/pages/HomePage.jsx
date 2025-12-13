@@ -292,6 +292,18 @@ const HomePage = () => {
                         </div>
                       )}
                     </div>
+
+                    <a
+                      href={product.affiliate_url || product.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-4 w-full py-2.5 px-4 bg-[#84CC16] hover:bg-[#65a30d] text-black font-semibold rounded-full text-center transition-all flex items-center justify-center gap-2"
+                      data-testid={`get-deal-${product.id}`}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      Get Deal
+                    </a>
                   </CardContent>
                 </Card>
               ))}
