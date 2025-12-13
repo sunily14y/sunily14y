@@ -78,6 +78,7 @@ class PriceAlert(BaseModel):
 class ProductResponse(BaseModel):
     id: str
     url: str
+    affiliate_url: Optional[str] = None
     platform: str
     name: str
     current_price: float
