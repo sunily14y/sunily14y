@@ -599,6 +599,7 @@ async def get_products():
         result.append(ProductResponse(
             id=p['id'],
             url=p['url'],
+            affiliate_url=generate_affiliate_url(p['url'], p['platform']),
             platform=p['platform'],
             name=p['name'],
             current_price=p['current_price'],
