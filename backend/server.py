@@ -477,10 +477,21 @@ async def get_products():
         
         price_values = [h['price'] for h in history] if history else [p['current_price']]
         
+        # Handle datetime conversion
+        created_at = p['created_at'] if isinstance(p['created_at'], str) else p['created_at'].isoformat()
+        updated_at = p['updated_at'] if isinstance(p['updated_at'], str) else p['updated_at'].isoformat()
+        
         result.append(ProductResponse(
-            **p,
-            created_at=p['created_at'] if isinstance(p['created_at'], str) else p['created_at'].isoformat(),
-            updated_at=p['updated_at'] if isinstance(p['updated_at'], str) else p['updated_at'].isoformat(),
+            id=p['id'],
+            url=p['url'],
+            platform=p['platform'],
+            name=p['name'],
+            current_price=p['current_price'],
+            original_price=p.get('original_price'),
+            image_url=p.get('image_url'),
+            currency=p.get('currency', 'INR'),
+            created_at=created_at,
+            updated_at=updated_at,
             lowest_price=min(price_values) if price_values else None,
             highest_price=max(price_values) if price_values else None
         ))
