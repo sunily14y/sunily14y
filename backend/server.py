@@ -198,7 +198,7 @@ async def fetch_with_scraperapi(url: str, platform: str = None) -> str:
 async def scrape_amazon(url: str) -> dict:
     """Scrape product details from Amazon using ScraperAPI"""
     try:
-        html = await fetch_with_scraperapi(url)
+        html = await fetch_with_scraperapi(url, 'amazon')
         soup = BeautifulSoup(html, 'lxml')
         
         # Product name
