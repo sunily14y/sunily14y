@@ -1,139 +1,145 @@
-/* Price History App Styles */
+/* Price History App - PriceHistory.app Style */
 
 .app-container {
     min-height: 100vh;
-    background-color: #ffffff;
+    background-color: #f8fafc;
 }
 
-/* Hero Section */
+/* Hero Section - Dark Navy */
 .hero-section {
-    background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
-    position: relative;
-}
-
-.hero-section::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: url('https://images.unsplash.com/photo-1741527043113-d066bfcfd842?crop=entropy&cs=srgb&fm=jpg&q=85');
-    background-size: cover;
-    background-position: center;
-    opacity: 0.03;
-    pointer-events: none;
-}
-
-/* Card hover effects */
-.product-card {
-    transition: all 0.2s ease;
-}
-
-.product-card:hover {
-    border-color: #cbd5e1;
-    transform: translateY(-2px);
-}
-
-/* Price display */
-.price-display {
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 500;
-    letter-spacing: -0.02em;
-}
-
-/* Button animations */
-.btn-primary {
-    transition: all 0.15s ease;
-}
-
-.btn-primary:hover {
-    transform: scale(1.02);
-}
-
-.btn-primary:active {
-    transform: scale(0.98);
-}
-
-/* Chart tooltip */
-.recharts-tooltip-wrapper {
-    outline: none !important;
-}
-
-.custom-tooltip {
-    background: white;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    padding: 12px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-}
-
-/* Platform badges */
-.platform-badge {
-    text-transform: capitalize;
-}
-
-.platform-amazon {
-    background-color: #ff9900;
-    color: #232f3e;
-}
-
-.platform-flipkart {
-    background-color: #2874f0;
+    background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
     color: white;
 }
 
-/* Loading states */
-.loading-pulse {
-    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+/* Search Box */
+.search-box {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.5;
-    }
+/* Search Button - Coral/Pink */
+.search-btn {
+    background: linear-gradient(135deg, #f43f5e 0%, #ec4899 100%);
+    color: white;
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.2s ease;
 }
 
-/* Input focus states */
-.search-input:focus {
-    box-shadow: 0 0 0 3px rgba(6, 78, 59, 0.1);
+.search-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(244, 63, 94, 0.4);
 }
 
-/* Sticky header */
-.sticky-header {
-    backdrop-filter: blur(12px);
-    background-color: rgba(255, 255, 255, 0.8);
+/* Product Cards */
+.product-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 0.2s ease;
+    overflow: hidden;
 }
 
-/* Price change indicators */
-.price-down {
+.product-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+}
+
+/* Platform Badge */
+.platform-badge {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.platform-amazon {
+    background-color: #f3f4f6;
+    color: #374151;
+}
+
+.platform-flipkart {
+    background-color: #f3f4f6;
+    color: #374151;
+}
+
+/* Discount Badge */
+.discount-badge {
     color: #16a34a;
+    font-weight: 700;
 }
 
-.price-up {
-    color: #dc2626;
+/* Original Price - Strikethrough */
+.original-price {
+    color: #9ca3af;
+    text-decoration: line-through;
+    font-size: 14px;
 }
 
-/* Chart area gradient */
-.price-chart-gradient {
-    stop-color: #064e3b;
+/* Current Price */
+.current-price {
+    color: #ef4444;
+    font-weight: 700;
 }
 
-/* Empty state */
-.empty-state {
-    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+/* Get Deal Button */
+.get-deal-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    color: #374151;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    background: white;
 }
 
-/* Responsive adjustments */
-@media (max-width: 640px) {
-    .hero-title {
-        font-size: 2.5rem;
-    }
-    
-    .product-grid {
-        grid-template-columns: 1fr;
-    }
+.get-deal-btn:hover {
+    background: #f9fafb;
+    border-color: #d1d5db;
+}
+
+/* Quick Links */
+.quick-link {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    padding: 8px 16px;
+    border-right: 1px solid rgba(255, 255, 255, 0.2);
+    transition: color 0.2s ease;
+}
+
+.quick-link:hover {
+    color: white;
+}
+
+.quick-link:last-child {
+    border-right: none;
+}
+
+/* Section Title */
+.section-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #1e293b;
+}
+
+.section-title span {
+    color: #ef4444;
+}
+
+/* Header */
+.header-nav {
+    background: #1e293b;
+    color: white;
+}
+
+/* Footer */
+.footer {
+    background: #1e293b;
+    color: white;
 }
