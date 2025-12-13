@@ -92,9 +92,11 @@ class ProductResponse(BaseModel):
 
 # ============= Scraper Service =============
 
-# Bright Data Configuration  
-BRIGHTDATA_API_KEY = os.environ.get('BRIGHTDATA_API_KEY', '')
-BRIGHTDATA_ZONE = os.environ.get('BRIGHTDATA_ZONE', 'serp_api1')  # User needs to create this zone
+# Bright Data Proxy Configuration  
+BRIGHTDATA_PROXY_HOST = os.environ.get('BRIGHTDATA_PROXY_HOST', 'brd.superproxy.io')
+BRIGHTDATA_PROXY_PORT = os.environ.get('BRIGHTDATA_PROXY_PORT', '33335')
+BRIGHTDATA_PROXY_USER = os.environ.get('BRIGHTDATA_PROXY_USER', '')
+BRIGHTDATA_PROXY_PASS = os.environ.get('BRIGHTDATA_PROXY_PASS', '')
 
 # Browser-like headers for scraping
 HEADERS = {
@@ -135,57 +137,40 @@ def clean_price(price_text: str) -> float:
         return 0.0
 
 async def fetch_with_brightdata(url: str) -> str:
-    """Fetch URL content using Bright Data Web Unlocker API"""
+    """Fetch URL content using Bright Data Proxy"""
     
-    # Try Bright Data API first
-    if BRIGHTDATA_API_KEY:
-        api_headers = {
-            "Authorization": f"Bearer {BRIGHTDATA_API_KEY}",
-            "Content-Type": "application/json"
-        }
-        
-        payload = {
-            "zone": BRIGHTDATA_ZONE,
-            "url": url,
-            "format": "raw",
-            "country": "in"
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.post(
-                    "https://api.brightdata.com/request",
-                    headers=api_headers,
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=60)
-                ) as response:
-                    if response.status == 200:
-                        return await response.text()
-                    else:
-                        error_text = await response.text()
-                        logger.warning(f"Bright Data API error: {response.status} - {error_text[:200]}")
-            except Exception as e:
-                logger.warning(f"Bright Data API failed: {str(e)}")
+    if not BRIGHTDATA_PROXY_USER or not BRIGHTDATA_PROXY_PASS:
+        raise HTTPException(status_code=500, detail="Bright Data proxy credentials not configured")
     
-    # Fallback to direct request with enhanced headers
+    # Build proxy URL
+    proxy_url = f"http://{BRIGHTDATA_PROXY_USER}:{BRIGHTDATA_PROXY_PASS}@{BRIGHTDATA_PROXY_HOST}:{BRIGHTDATA_PROXY_PORT}"
+    
+    logger.info(f"Fetching {url} via Bright Data proxy")
+    
     connector = aiohttp.TCPConnector(ssl=False)
     async with aiohttp.ClientSession(connector=connector) as session:
         try:
             async with session.get(
                 url,
                 headers=HEADERS,
-                timeout=aiohttp.ClientTimeout(total=30),
+                proxy=proxy_url,
+                timeout=aiohttp.ClientTimeout(total=60),
                 allow_redirects=True
             ) as response:
+                logger.info(f"Proxy response status: {response.status}")
                 if response.status == 200:
                     html = await response.text()
-                    # Check if we got a valid page (not a captcha/block page)
-                    if len(html) > 5000:
+                    if len(html) > 1000:
                         return html
-                raise HTTPException(
-                    status_code=response.status, 
-                    detail=f"Could not fetch page. The site may be blocking requests. Status: {response.status}"
-                )
+                    else:
+                        raise HTTPException(status_code=400, detail="Received incomplete page content")
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Proxy error: {response.status} - {error_text[:200]}")
+                    raise HTTPException(status_code=response.status, detail=f"Failed to fetch page: Status {response.status}")
+        except aiohttp.ClientProxyConnectionError as e:
+            logger.error(f"Proxy connection error: {str(e)}")
+            raise HTTPException(status_code=503, detail=f"Proxy connection failed: {str(e)}")
         except asyncio.TimeoutError:
             raise HTTPException(status_code=408, detail="Request timeout while fetching page")
         except HTTPException:
