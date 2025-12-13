@@ -135,6 +135,30 @@ def clean_url(url: str, platform: str) -> str:
     
     return url
 
+def generate_affiliate_url(url: str, platform: str) -> str:
+    """Generate affiliate URL for the given platform"""
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    
+    parsed = urlparse(url)
+    
+    if platform == 'amazon' and AMAZON_AFFILIATE_TAG:
+        # Amazon affiliate: add tag parameter
+        # Format: https://www.amazon.in/dp/PRODUCT_ID?tag=affiliate-tag
+        query_params = parse_qs(parsed.query)
+        query_params['tag'] = [AMAZON_AFFILIATE_TAG]
+        new_query = urlencode(query_params, doseq=True)
+        return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+    
+    elif platform == 'flipkart' and FLIPKART_AFFILIATE_ID:
+        # Flipkart affiliate: add affid parameter
+        # Format: https://www.flipkart.com/product-path?affid=affiliate-id
+        query_params = parse_qs(parsed.query)
+        query_params['affid'] = [FLIPKART_AFFILIATE_ID]
+        new_query = urlencode(query_params, doseq=True)
+        return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+    
+    return url
+
 def clean_price(price_text: str) -> float:
     """Extract numeric price from text"""
     if not price_text:
