@@ -2,11 +2,9 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { toast } from "sonner";
-import { Search, TrendingDown, Bell, BarChart3, Loader2, ExternalLink, Trash2, RefreshCw } from "lucide-react";
+import { Search, ShoppingCart, TrendingUp, Loader2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -40,7 +38,6 @@ const HomePage = () => {
       return;
     }
 
-    // Basic URL validation
     if (!url.includes("amazon") && !url.includes("flipkart")) {
       toast.error("Please enter a valid Amazon or Flipkart product URL");
       return;
@@ -71,256 +68,204 @@ const HomePage = () => {
     }
   };
 
-  const formatPrice = (price, currency = "INR") => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: currency,
-      maximumFractionDigits: 0
-    }).format(price);
+  const formatPrice = (price) => {
+    return new Intl.NumberFormat('en-IN').format(Math.round(price));
   };
 
-  const getPlatformColor = (platform) => {
-    return platform === "amazon" ? "bg-[#ff9900] text-[#232f3e]" : "bg-[#2874f0] text-white";
+  const calculateDiscount = (original, current) => {
+    if (!original || original <= current) return null;
+    return Math.round(((original - current) / original) * 100);
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="app-container min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-50 sticky-header border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="h-7 w-7 text-[#064E3B]" />
-              <span className="font-heading font-bold text-xl text-slate-900">PriceTracker</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-500">Track prices. Save money.</span>
-            </div>
+      <header className="header-nav py-3">
+        <div className="max-w-7xl mx-auto px-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-6 w-6 text-pink-500" />
+            <span className="font-heading font-bold text-xl">PriceHistory</span>
           </div>
+          <nav className="hidden md:flex items-center gap-6 text-sm">
+            <a href="#" className="text-gray-300 hover:text-white transition-colors">Amazon Price Tracker</a>
+            <a href="#" className="text-gray-300 hover:text-white transition-colors">Flipkart Price Tracker</a>
+            <a href="#" className="text-gray-300 hover:text-white transition-colors">Latest Deals</a>
+          </nav>
         </div>
       </header>
 
       {/* Hero Section */}
-      <section className="hero-section relative py-16 md:py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="text-center max-w-3xl mx-auto">
-            <h1 className="font-heading font-bold text-4xl sm:text-5xl lg:text-6xl text-slate-900 tracking-tight mb-6">
-              Track Prices.
-              <span className="text-[#064E3B]"> Save Money.</span>
-            </h1>
-            <p className="text-lg text-slate-600 mb-10 max-w-2xl mx-auto">
-              Monitor product prices across Amazon and Flipkart. Get notified when prices drop.
-              Make smarter purchasing decisions.
-            </p>
-
-            {/* Search Form */}
-            <form onSubmit={handleTrackProduct} className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto">
-              <div className="relative flex-1">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+      <section className="hero-section py-12 md:py-16">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h1 className="font-heading font-bold text-2xl md:text-3xl mb-8">
+            Price History - Price Tracker
+          </h1>
+          
+          <div className="bg-slate-700/50 rounded-xl p-6 md:p-8">
+            <h2 className="text-lg md:text-xl font-semibold mb-6">Search Price History</h2>
+            
+            <form onSubmit={handleTrackProduct} className="space-y-4">
+              <div className="search-box flex items-center">
+                <Search className="h-5 w-5 text-gray-400 ml-4" />
                 <Input
                   data-testid="search-input"
-                  type="url"
-                  placeholder="Paste Amazon or Flipkart product URL..."
+                  type="text"
+                  placeholder="Enter Product Link or Name"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  className="h-14 pl-12 pr-4 rounded-full border-slate-200 focus:ring-2 focus:ring-[#064E3B]/20 focus:border-[#064E3B] text-lg search-input"
+                  className="flex-1 border-0 focus-visible:ring-0 text-gray-700 text-base py-6"
                   disabled={isLoading}
                 />
               </div>
+              
               <Button
                 data-testid="search-button"
                 type="submit"
                 disabled={isLoading}
-                className="h-14 px-8 rounded-full bg-[#064E3B] hover:bg-[#064E3B]/90 text-white font-semibold text-lg btn-primary"
+                className="search-btn w-full md:w-auto px-12 py-6 text-base"
               >
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                    Tracking...
+                    Searching...
                   </>
                 ) : (
-                  <>
-                    <TrendingDown className="mr-2 h-5 w-5" />
-                    Track Price
-                  </>
+                  "Search"
                 )}
               </Button>
             </form>
 
-            {/* Features */}
-            <div className="mt-12 grid grid-cols-1 sm:grid-cols-3 gap-6 max-w-3xl mx-auto">
-              <div className="flex items-center justify-center gap-3 text-slate-600">
-                <div className="h-10 w-10 rounded-full bg-[#064E3B]/10 flex items-center justify-center">
-                  <BarChart3 className="h-5 w-5 text-[#064E3B]" />
-                </div>
-                <span className="text-sm font-medium">Price History Charts</span>
-              </div>
-              <div className="flex items-center justify-center gap-3 text-slate-600">
-                <div className="h-10 w-10 rounded-full bg-[#84CC16]/10 flex items-center justify-center">
-                  <Bell className="h-5 w-5 text-[#84CC16]" />
-                </div>
-                <span className="text-sm font-medium">Price Drop Alerts</span>
-              </div>
-              <div className="flex items-center justify-center gap-3 text-slate-600">
-                <div className="h-10 w-10 rounded-full bg-[#064E3B]/10 flex items-center justify-center">
-                  <TrendingDown className="h-5 w-5 text-[#064E3B]" />
-                </div>
-                <span className="text-sm font-medium">Best Price Tracking</span>
-              </div>
+            <p className="text-sm text-gray-400 mt-4 max-w-2xl mx-auto">
+              *Want to search a historical price chart of products or the lowest ever price? 
+              Search for the name of the product or paste the product's link in the search box and hit enter.
+            </p>
+
+            {/* Quick Links */}
+            <div className="flex flex-wrap justify-center mt-6 border-t border-slate-600 pt-6">
+              <a href="#" className="quick-link">Amazon Price Tracker</a>
+              <a href="#" className="quick-link">Flipkart Price Tracker</a>
+              <a href="#" className="quick-link">Latest Deals</a>
+              <a href="#" className="quick-link">Price Drop</a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Tracked Products */}
-      <section className="py-16 bg-[#F8FAFC]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="font-heading font-semibold text-2xl text-slate-900">
-              Tracked Products
-            </h2>
-            {products.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchProducts}
-                className="rounded-full"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
-            )}
-          </div>
+      {/* Trending Deals Section */}
+      <section className="py-10 px-4">
+        <div className="max-w-7xl mx-auto">
+          <h2 className="section-title mb-6">
+            <span>New</span> Trending Deals
+          </h2>
 
           {isLoadingProducts ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {[1, 2, 3].map((i) => (
-                <Card key={i} className="bg-white border border-slate-100 rounded-2xl overflow-hidden">
-                  <CardContent className="p-6">
-                    <div className="animate-pulse space-y-4">
-                      <div className="h-40 bg-slate-200 rounded-xl" />
-                      <div className="h-4 bg-slate-200 rounded w-3/4" />
-                      <div className="h-6 bg-slate-200 rounded w-1/2" />
-                    </div>
-                  </CardContent>
-                </Card>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div key={i} className="product-card p-4 animate-pulse">
+                  <div className="h-32 bg-gray-200 rounded mb-3" />
+                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+                  <div className="h-4 bg-gray-200 rounded w-1/2" />
+                </div>
               ))}
             </div>
           ) : products.length === 0 ? (
-            <Card className="bg-white border border-slate-100 rounded-2xl empty-state">
-              <CardContent className="py-16 text-center">
-                <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
-                  <Search className="h-8 w-8 text-slate-400" />
-                </div>
-                <h3 className="font-heading font-semibold text-lg text-slate-900 mb-2">
-                  No products tracked yet
-                </h3>
-                <p className="text-slate-500 max-w-sm mx-auto">
-                  Start by pasting an Amazon or Flipkart product URL above to track its price history.
-                </p>
-              </CardContent>
-            </Card>
+            <div className="text-center py-16 bg-white rounded-xl">
+              <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="font-semibold text-lg text-gray-700 mb-2">No products tracked yet</h3>
+              <p className="text-gray-500">Start by pasting an Amazon or Flipkart product URL above</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="products-grid">
-              {products.map((product, index) => (
-                <Card
-                  key={product.id}
-                  data-testid={`product-card-${product.id}`}
-                  className="bg-white border border-slate-100 rounded-2xl overflow-hidden product-card cursor-pointer hover:border-slate-200 transition-all"
-                  onClick={() => navigate(`/product/${product.id}`)}
-                  style={{ animationDelay: `${index * 0.1}s` }}
-                >
-                  <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <Badge className={`${getPlatformColor(product.platform)} text-xs font-medium px-2 py-1 rounded-full platform-badge`}>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4" data-testid="products-grid">
+              {products.map((product) => {
+                const discount = calculateDiscount(product.original_price, product.current_price);
+                return (
+                  <div
+                    key={product.id}
+                    data-testid={`product-card-${product.id}`}
+                    className="product-card cursor-pointer relative group"
+                    onClick={() => navigate(`/product/${product.id}`)}
+                  >
+                    {/* Platform Badge */}
+                    <div className="absolute top-3 right-3 z-10">
+                      <span className={`platform-badge uppercase ${product.platform === 'amazon' ? 'platform-amazon' : 'platform-flipkart'}`}>
                         {product.platform}
-                      </Badge>
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={product.affiliate_url || product.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors"
-                        >
-                          <ExternalLink className="h-4 w-4 text-slate-500" />
-                        </a>
-                        <button
-                          onClick={(e) => handleDeleteProduct(product.id, e)}
-                          className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center hover:bg-red-100 transition-colors"
-                          data-testid={`delete-product-${product.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-slate-500 hover:text-red-500" />
-                        </button>
-                      </div>
+                      </span>
                     </div>
 
-                    <div className="aspect-square w-full max-w-[200px] mx-auto mb-4 bg-slate-50 rounded-xl overflow-hidden">
-                      {product.image_url ? (
-                        <img
-                          src={product.image_url}
-                          alt={product.name}
-                          className="w-full h-full object-contain p-2"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-slate-400">
-                          <BarChart3 className="h-12 w-12" />
-                        </div>
-                      )}
-                    </div>
-
-                    <h3 className="font-medium text-slate-900 text-sm line-clamp-2 mb-3 text-left">
-                      {product.name}
-                    </h3>
-
-                    <div className="flex items-end justify-between">
-                      <div className="text-left">
-                        <p className="text-xs text-slate-500 mb-1">Current Price</p>
-                        <p className="font-mono text-2xl font-medium text-slate-900 price-display">
-                          {formatPrice(product.current_price, product.currency)}
-                        </p>
-                      </div>
-                      {product.lowest_price && product.lowest_price < product.current_price && (
-                        <div className="text-right">
-                          <p className="text-xs text-slate-500 mb-1">Lowest</p>
-                          <p className="font-mono text-sm font-medium text-[#16a34a] price-display">
-                            {formatPrice(product.lowest_price, product.currency)}
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <a
-                      href={product.affiliate_url || product.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="mt-4 w-full py-2.5 px-4 bg-[#84CC16] hover:bg-[#65a30d] text-black font-semibold rounded-full text-center transition-all flex items-center justify-center gap-2"
-                      data-testid={`get-deal-${product.id}`}
+                    {/* Delete Button */}
+                    <button
+                      onClick={(e) => handleDeleteProduct(product.id, e)}
+                      className="absolute top-3 left-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full p-1.5 shadow-md hover:bg-red-50"
+                      data-testid={`delete-product-${product.id}`}
                     >
-                      <ExternalLink className="h-4 w-4" />
-                      Get Deal
-                    </a>
-                  </CardContent>
-                </Card>
-              ))}
+                      <Trash2 className="h-4 w-4 text-gray-400 hover:text-red-500" />
+                    </button>
+
+                    {/* Product Image */}
+                    <div className="p-4 pb-0">
+                      <div className="aspect-square bg-gray-50 rounded-lg overflow-hidden flex items-center justify-center">
+                        {product.image_url ? (
+                          <img
+                            src={product.image_url}
+                            alt={product.name}
+                            className="w-full h-full object-contain p-2"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <ShoppingCart className="h-12 w-12 text-gray-300" />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Product Info */}
+                    <div className="p-4">
+                      <h3 className="text-sm text-gray-700 line-clamp-2 mb-3 min-h-[40px]">
+                        {product.name}
+                      </h3>
+
+                      {/* Price Section */}
+                      <div className="flex items-center gap-2 mb-3">
+                        {discount && (
+                          <span className="discount-badge">{discount}%</span>
+                        )}
+                        {product.original_price && product.original_price > product.current_price && (
+                          <span className="original-price">₹{formatPrice(product.original_price)}</span>
+                        )}
+                        <span className="current-price">₹{formatPrice(product.current_price)}</span>
+                      </div>
+
+                      {/* Get Deal Button */}
+                      <a
+                        href={product.affiliate_url || product.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="get-deal-btn w-full"
+                        data-testid={`get-deal-${product.id}`}
+                      >
+                        <ShoppingCart className="h-4 w-4" />
+                        Get Deal
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       </section>
 
       {/* Footer */}
-      <footer className="py-8 border-t border-slate-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+      <footer className="footer py-8 mt-10">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <BarChart3 className="h-5 w-5 text-[#064E3B]" />
-              <span className="font-heading font-semibold text-slate-900">PriceTracker</span>
+              <TrendingUp className="h-5 w-5 text-pink-500" />
+              <span className="font-heading font-semibold">PriceHistory</span>
             </div>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-gray-400">
               Track prices across Amazon & Flipkart. Save money on every purchase.
             </p>
           </div>
