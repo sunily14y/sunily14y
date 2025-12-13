@@ -105,6 +105,32 @@ def detect_platform(url: str) -> str:
     else:
         raise HTTPException(status_code=400, detail="Unsupported platform. Only Amazon and Flipkart product URLs are supported.")
 
+def clean_url(url: str, platform: str) -> str:
+    """Clean URL by removing unnecessary query parameters"""
+    from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    
+    parsed = urlparse(url)
+    
+    if platform == 'flipkart':
+        # For Flipkart, keep only the base path with product ID
+        # Example: https://www.flipkart.com/apple-iphone-15-128-gb-black/p/itm6ac6485515ae4
+        path = parsed.path
+        # Remove query string for cleaner URLs
+        clean = urlunparse((parsed.scheme, parsed.netloc, path, '', '', ''))
+        return clean
+    elif platform == 'amazon':
+        # For Amazon, keep the /dp/PRODUCT_ID format
+        path = parsed.path
+        # Extract just the /dp/XXXXX part if present
+        if '/dp/' in path:
+            dp_match = re.search(r'(/dp/[A-Z0-9]+)', path)
+            if dp_match:
+                path = dp_match.group(1)
+        clean = urlunparse((parsed.scheme, parsed.netloc, path, '', '', ''))
+        return clean
+    
+    return url
+
 def clean_price(price_text: str) -> float:
     """Extract numeric price from text"""
     if not price_text:
