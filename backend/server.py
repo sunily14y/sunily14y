@@ -158,15 +158,16 @@ async def fetch_with_brightdata(url: str) -> str:
                 allow_redirects=True
             ) as response:
                 logger.info(f"Proxy response status: {response.status}")
-                if response.status == 200:
-                    html = await response.text()
-                    if len(html) > 1000:
-                        return html
-                    else:
-                        raise HTTPException(status_code=400, detail="Received incomplete page content")
+                html = await response.text()
+                
+                # Check if we got valid HTML content (even if status is not 200)
+                if len(html) > 5000 and ('<html' in html.lower() or '<!doctype' in html.lower()):
+                    logger.info(f"Got valid HTML content, length: {len(html)}")
+                    return html
+                elif response.status == 200:
+                    return html
                 else:
-                    error_text = await response.text()
-                    logger.error(f"Proxy error: {response.status} - {error_text[:200]}")
+                    logger.error(f"Proxy error: {response.status} - {html[:200]}")
                     raise HTTPException(status_code=response.status, detail=f"Failed to fetch page: Status {response.status}")
         except aiohttp.ClientProxyConnectionError as e:
             logger.error(f"Proxy connection error: {str(e)}")
