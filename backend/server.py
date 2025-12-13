@@ -142,11 +142,17 @@ def clean_price(price_text: str) -> float:
     except ValueError:
         return 0.0
 
-async def fetch_with_scraperapi(url: str) -> str:
+async def fetch_with_scraperapi(url: str, platform: str = None) -> str:
     """Fetch URL content using ScraperAPI"""
     
     if not SCRAPERAPI_KEY:
         raise HTTPException(status_code=500, detail="ScraperAPI key not configured")
+    
+    # Clean the URL to remove unnecessary parameters
+    if platform:
+        url = clean_url(url, platform)
+    
+    logger.info(f"Fetching {url} via ScraperAPI")
     
     # Build ScraperAPI URL with parameters
     params = {
@@ -155,8 +161,6 @@ async def fetch_with_scraperapi(url: str) -> str:
         'render': 'true',  # JavaScript rendering for dynamic content
         'country_code': 'in'  # India for Amazon.in and Flipkart
     }
-    
-    logger.info(f"Fetching {url} via ScraperAPI")
     
     async with aiohttp.ClientSession() as session:
         try:
