@@ -107,7 +107,7 @@ def detect_platform(url: str) -> str:
     elif 'flipkart' in url.lower():
         return 'flipkart'
     else:
-        raise ValueError("Unsupported platform. Only Amazon and Flipkart are supported.")
+        raise HTTPException(status_code=400, detail="Unsupported platform. Only Amazon and Flipkart product URLs are supported.")
 
 def clean_price(price_text: str) -> float:
     """Extract numeric price from text"""
