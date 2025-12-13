@@ -93,11 +93,38 @@ class ProductResponse(BaseModel):
 # ============= Scraper Service =============
 
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Accept-Language': 'en-US,en;q=0.5',
-    'Accept-Encoding': 'gzip, deflate',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
     'Connection': 'keep-alive',
+    'Cache-Control': 'max-age=0',
+    'Sec-Ch-Ua': '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Sec-Fetch-User': '?1',
+    'Upgrade-Insecure-Requests': '1',
+}
+
+# Demo products for testing when scraping fails
+DEMO_PRODUCTS = {
+    'amazon': {
+        'name': 'Sample Product from Amazon',
+        'current_price': 24999.0,
+        'original_price': 34999.0,
+        'image_url': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400',
+        'platform': 'amazon'
+    },
+    'flipkart': {
+        'name': 'Sample Product from Flipkart', 
+        'current_price': 18999.0,
+        'original_price': 29999.0,
+        'image_url': 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400',
+        'platform': 'flipkart'
+    }
 }
 
 def detect_platform(url: str) -> str:
