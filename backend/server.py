@@ -636,6 +636,7 @@ async def get_product(product_id: str):
     return ProductResponse(
         id=product['id'],
         url=product['url'],
+        affiliate_url=generate_affiliate_url(product['url'], product['platform']),
         platform=product['platform'],
         name=product['name'],
         current_price=product['current_price'],
