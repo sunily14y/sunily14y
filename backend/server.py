@@ -727,6 +727,46 @@ async def delete_product(product_id: str):
     
     return {"message": "Product deleted successfully"}
 
+@api_router.post("/products/refresh-all")
+async def refresh_all_products():
+    """Refresh all products - update prices and images"""
+    products = await db.products.find({}, {"_id": 0}).to_list(100)
+    results = {"success": 0, "failed": 0, "errors": []}
+    
+    for product in products:
+        try:
+            scraped = await scrape_product(product['url'], product['platform'])
+            
+            if scraped['current_price'] > 0:
+                now = datetime.now(timezone.utc).isoformat()
+                
+                # Update product with new data
+                update_data = {
+                    "current_price": scraped['current_price'],
+                    "updated_at": now
+                }
+                
+                # Update image if we got a valid one
+                if scraped.get('image_url') and 'unsplash' not in str(scraped['image_url']):
+                    update_data["image_url"] = scraped['image_url']
+                
+                if scraped.get('original_price'):
+                    update_data["original_price"] = scraped['original_price']
+                
+                await db.products.update_one(
+                    {"id": product['id']},
+                    {"$set": update_data}
+                )
+                results["success"] += 1
+            else:
+                results["failed"] += 1
+                results["errors"].append(f"{product['name'][:30]}: No price found")
+        except Exception as e:
+            results["failed"] += 1
+            results["errors"].append(f"{product['name'][:30]}: {str(e)[:50]}")
+    
+    return results
+
 @api_router.post("/alerts", response_model=PriceAlert)
 async def create_price_alert(alert_data: PriceAlertCreate):
     """Create a price drop alert"""
