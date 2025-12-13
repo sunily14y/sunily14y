@@ -281,7 +281,7 @@ async def scrape_amazon(url: str) -> dict:
 async def scrape_flipkart(url: str) -> dict:
     """Scrape product details from Flipkart using ScraperAPI"""
     try:
-        html = await fetch_with_scraperapi(url)
+        html = await fetch_with_scraperapi(url, 'flipkart')
         soup = BeautifulSoup(html, 'lxml')
         
         # Product name - multiple selectors for different page layouts
