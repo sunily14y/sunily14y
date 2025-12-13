@@ -1,0 +1,71 @@
+{
+  "summary": {
+    "total_tests": 8,
+    "passed_tests": 7,
+    "success_rate": 0.875,
+    "timestamp": "2025-12-13T16:01:14.907348"
+  },
+  "detailed_results": [
+    {
+      "test_name": "Health Check",
+      "success": true,
+      "details": "Status: 200, Response: {'status': 'healthy'}",
+      "response_data": {
+        "status": "healthy"
+      },
+      "timestamp": "2025-12-13T16:00:58.556993"
+    },
+    {
+      "test_name": "Root Endpoint",
+      "success": true,
+      "details": "Status: 200, Message: Price History Tracker API",
+      "response_data": {
+        "message": "Price History Tracker API",
+        "version": "1.0.0"
+      },
+      "timestamp": "2025-12-13T16:00:58.596348"
+    },
+    {
+      "test_name": "GET Products (Empty)",
+      "success": true,
+      "details": "Status: 200, Products count: 0",
+      "response_data": [],
+      "timestamp": "2025-12-13T16:00:58.642401"
+    },
+    {
+      "test_name": "Track Product (Invalid URL)",
+      "success": false,
+      "details": "Status: 500 (Expected 400/422 for invalid platform)",
+      "response_data": "{\"detail\":\"Unsupported platform. Only Amazon and Flipkart are supported.\"}",
+      "timestamp": "2025-12-13T16:00:58.677572"
+    },
+    {
+      "test_name": "Track Product (Amazon URL)",
+      "success": true,
+      "details": "Status: 400 (Expected scraping failure)",
+      "response_data": "{\"detail\":\"Could not extract price from the page. The website might be blocking scrapers or the page structure has changed.\"}",
+      "timestamp": "2025-12-13T16:00:59.023803"
+    },
+    {
+      "test_name": "Track Product (Flipkart URL)",
+      "success": true,
+      "details": "Status: 400 (Expected scraping failure)",
+      "response_data": "{\"detail\":\"Failed to scrape Flipkart: 400: Failed to fetch Flipkart page: 529\"}",
+      "timestamp": "2025-12-13T16:01:14.817578"
+    },
+    {
+      "test_name": "GET Non-existent Product",
+      "success": true,
+      "details": "Status: 404 (Expected 404)",
+      "response_data": null,
+      "timestamp": "2025-12-13T16:01:14.871228"
+    },
+    {
+      "test_name": "DELETE Non-existent Product",
+      "success": true,
+      "details": "Status: 404 (Expected 404)",
+      "response_data": null,
+      "timestamp": "2025-12-13T16:01:14.906425"
+    }
+  ]
+}
