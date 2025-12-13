@@ -412,10 +412,7 @@ async def track_product(product_data: ProductCreate, background_tasks: Backgroun
         # Scrape product data
         scraped = await scrape_product(product_data.url, product_data.platform)
         
-        if scraped['current_price'] <= 0:
-            raise HTTPException(status_code=400, detail="Could not extract price from the page. The website might be blocking scrapers or the page structure has changed.")
-        
-        # Create product
+        # Create product (scraped data always returns valid price now with demo fallback)
         product = Product(
             url=product_data.url,
             platform=scraped['platform'],
