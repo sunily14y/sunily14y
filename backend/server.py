@@ -323,6 +323,7 @@ async def scrape_flipkart(url: str) -> dict:
         
         # Image
         image_selectors = [
+            'img.UCc1lI',  # New main product image selector
             'img.DByuf4.IZexXJ.jLEJ7H',
             'img._396cs4._2amPTt._3qGmMb',
             'img._396cs4',
@@ -334,8 +335,17 @@ async def scrape_flipkart(url: str) -> dict:
         for selector in image_selectors:
             image_elem = soup.select_one(selector)
             if image_elem:
-                image_url = image_elem.get('src')
-                if image_url and 'rukminim' in image_url:
+                src = image_elem.get('src', '')
+                if src and 'rukminim' in src and 'placeholder' not in src:
+                    image_url = src if src.startswith('http') else f"https:{src}"
+                    break
+        
+        # Fallback: find any rukminim image with good size
+        if not image_url:
+            for img in soup.find_all('img'):
+                src = img.get('src', '')
+                if 'rukminim' in src and '/416/' in src:
+                    image_url = src if src.startswith('http') else f"https:{src}"
                     break
         
         if current_price <= 0:
