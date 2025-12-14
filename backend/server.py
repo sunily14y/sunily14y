@@ -813,6 +813,267 @@ async def get_product_alerts(product_id: str):
     ).to_list(100)
     return alerts
 
+# ============= Auto-Discovery System =============
+
+class DiscoveryConfig(BaseModel):
+    max_products: int = 50
+    sources: List[str] = ["flipkart_deals", "flipkart_mobiles", "amazon_deals"]
+
+async def discover_flipkart_products(category_url: str, max_products: int = 20) -> List[str]:
+    """Discover product URLs from Flipkart category/deals pages"""
+    try:
+        html = await fetch_with_scraperapi(category_url, 'flipkart')
+        soup = BeautifulSoup(html, 'lxml')
+        
+        product_urls = []
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if '/p/itm' in href:
+                if href.startswith('/'):
+                    href = 'https://www.flipkart.com' + href
+                # Clean URL
+                clean_url = href.split('?')[0]
+                if clean_url not in product_urls:
+                    product_urls.append(clean_url)
+                if len(product_urls) >= max_products:
+                    break
+        
+        return product_urls
+    except Exception as e:
+        logger.error(f"Flipkart discovery error: {str(e)}")
+        return []
+
+async def discover_amazon_products(category_url: str, max_products: int = 20) -> List[str]:
+    """Discover product URLs from Amazon category/deals pages"""
+    try:
+        html = await fetch_with_scraperapi(category_url, 'amazon')
+        soup = BeautifulSoup(html, 'lxml')
+        
+        product_urls = []
+        for a in soup.find_all('a', href=True):
+            href = a['href']
+            if '/dp/' in href:
+                # Extract ASIN
+                match = re.search(r'/dp/([A-Z0-9]{10})', href)
+                if match:
+                    asin = match.group(1)
+                    clean_url = f"https://www.amazon.in/dp/{asin}"
+                    if clean_url not in product_urls:
+                        product_urls.append(clean_url)
+                    if len(product_urls) >= max_products:
+                        break
+        
+        return product_urls
+    except Exception as e:
+        logger.error(f"Amazon discovery error: {str(e)}")
+        return []
+
+# Predefined discovery sources
+DISCOVERY_SOURCES = {
+    "flipkart_deals": {
+        "url": "https://www.flipkart.com/offers-store",
+        "platform": "flipkart",
+        "name": "Flipkart Deals"
+    },
+    "flipkart_mobiles": {
+        "url": "https://www.flipkart.com/mobile-phones-store",
+        "platform": "flipkart",
+        "name": "Flipkart Mobiles"
+    },
+    "flipkart_electronics": {
+        "url": "https://www.flipkart.com/electronics-store",
+        "platform": "flipkart",
+        "name": "Flipkart Electronics"
+    },
+    "flipkart_fashion": {
+        "url": "https://www.flipkart.com/fashion-store",
+        "platform": "flipkart",
+        "name": "Flipkart Fashion"
+    },
+    "amazon_deals": {
+        "url": "https://www.amazon.in/deals",
+        "platform": "amazon",
+        "name": "Amazon Deals"
+    },
+    "amazon_mobiles": {
+        "url": "https://www.amazon.in/mobile-phones/b?node=1389401031",
+        "platform": "amazon",
+        "name": "Amazon Mobiles"
+    },
+    "amazon_electronics": {
+        "url": "https://www.amazon.in/electronics/b?node=976419031",
+        "platform": "amazon",
+        "name": "Amazon Electronics"
+    },
+    "amazon_bestsellers": {
+        "url": "https://www.amazon.in/gp/bestsellers/",
+        "platform": "amazon",
+        "name": "Amazon Best Sellers"
+    }
+}
+
+@api_router.get("/discovery/sources")
+async def get_discovery_sources():
+    """Get available discovery sources"""
+    return {key: {"name": val["name"], "platform": val["platform"]} for key, val in DISCOVERY_SOURCES.items()}
+
+@api_router.post("/discovery/run")
+async def run_discovery(background_tasks: BackgroundTasks, sources: List[str] = None, max_per_source: int = 10):
+    """Run product discovery from selected sources"""
+    if not sources:
+        sources = ["flipkart_deals", "amazon_deals"]
+    
+    # Validate sources
+    valid_sources = [s for s in sources if s in DISCOVERY_SOURCES]
+    if not valid_sources:
+        raise HTTPException(status_code=400, detail="No valid sources provided")
+    
+    # Start discovery in background
+    background_tasks.add_task(execute_discovery, valid_sources, max_per_source)
+    
+    return {
+        "status": "started",
+        "sources": valid_sources,
+        "max_per_source": max_per_source,
+        "message": "Discovery started in background. Check /api/discovery/status for progress."
+    }
+
+async def execute_discovery(sources: List[str], max_per_source: int):
+    """Execute the actual discovery process"""
+    discovery_id = str(uuid.uuid4())[:8]
+    
+    # Store discovery status
+    await db.discovery_logs.insert_one({
+        "id": discovery_id,
+        "status": "running",
+        "sources": sources,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "products_found": 0,
+        "products_added": 0,
+        "products_skipped": 0,
+        "errors": []
+    })
+    
+    total_found = 0
+    total_added = 0
+    total_skipped = 0
+    errors = []
+    
+    for source_key in sources:
+        source = DISCOVERY_SOURCES[source_key]
+        logger.info(f"[Discovery] Scanning {source['name']}...")
+        
+        try:
+            # Discover product URLs
+            if source['platform'] == 'flipkart':
+                urls = await discover_flipkart_products(source['url'], max_per_source)
+            else:
+                urls = await discover_amazon_products(source['url'], max_per_source)
+            
+            total_found += len(urls)
+            logger.info(f"[Discovery] Found {len(urls)} products from {source['name']}")
+            
+            # Add products (skip duplicates)
+            for url in urls:
+                try:
+                    # Check if already exists
+                    existing = await db.products.find_one({"url": {"$regex": url.split('?')[0]}}, {"_id": 0, "id": 1})
+                    if existing:
+                        total_skipped += 1
+                        continue
+                    
+                    # Scrape and add product
+                    scraped = await scrape_product(url, source['platform'])
+                    
+                    if scraped['current_price'] > 0:
+                        product = Product(
+                            url=url,
+                            platform=source['platform'],
+                            name=scraped['name'],
+                            current_price=scraped['current_price'],
+                            original_price=scraped.get('original_price'),
+                            image_url=scraped.get('image_url')
+                        )
+                        
+                        product_dict = product.model_dump()
+                        product_dict['created_at'] = product_dict['created_at'].isoformat()
+                        product_dict['updated_at'] = product_dict['updated_at'].isoformat()
+                        product_dict['discovered_from'] = source_key
+                        
+                        await db.products.insert_one(product_dict)
+                        
+                        # Add initial price history
+                        price_history = PriceHistory(
+                            product_id=product.id,
+                            price=product.current_price
+                        )
+                        history_dict = price_history.model_dump()
+                        history_dict['recorded_at'] = history_dict['recorded_at'].isoformat()
+                        await db.price_history.insert_one(history_dict)
+                        
+                        total_added += 1
+                        logger.info(f"[Discovery] Added: {scraped['name'][:40]} - ₹{scraped['current_price']}")
+                    
+                    # Small delay to avoid rate limiting
+                    await asyncio.sleep(2)
+                    
+                except Exception as e:
+                    errors.append(f"{url[:50]}: {str(e)[:50]}")
+                    logger.error(f"[Discovery] Error adding product: {str(e)}")
+        
+        except Exception as e:
+            errors.append(f"{source['name']}: {str(e)[:50]}")
+            logger.error(f"[Discovery] Error scanning {source['name']}: {str(e)}")
+    
+    # Update discovery log
+    await db.discovery_logs.update_one(
+        {"id": discovery_id},
+        {"$set": {
+            "status": "completed",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "products_found": total_found,
+            "products_added": total_added,
+            "products_skipped": total_skipped,
+            "errors": errors[:20]  # Keep only first 20 errors
+        }}
+    )
+    
+    logger.info(f"[Discovery] Complete! Found: {total_found}, Added: {total_added}, Skipped: {total_skipped}")
+
+@api_router.get("/discovery/status")
+async def get_discovery_status():
+    """Get status of recent discoveries"""
+    logs = await db.discovery_logs.find(
+        {},
+        {"_id": 0}
+    ).sort("started_at", -1).limit(5).to_list(5)
+    return logs
+
+@api_router.get("/discovery/stats")
+async def get_discovery_stats():
+    """Get discovery statistics"""
+    total_products = await db.products.count_documents({})
+    
+    # Count by platform
+    flipkart_count = await db.products.count_documents({"platform": "flipkart"})
+    amazon_count = await db.products.count_documents({"platform": "amazon"})
+    
+    # Count by discovery source
+    discovered_count = await db.products.count_documents({"discovered_from": {"$exists": True}})
+    manual_count = total_products - discovered_count
+    
+    return {
+        "total_products": total_products,
+        "by_platform": {
+            "flipkart": flipkart_count,
+            "amazon": amazon_count
+        },
+        "by_source": {
+            "auto_discovered": discovered_count,
+            "manually_added": manual_count
+        }
+    }
+
 # Include the router in the main app
 app.include_router(api_router)
 
