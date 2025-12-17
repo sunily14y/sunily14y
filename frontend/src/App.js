@@ -320,26 +320,7 @@ const TemplatesPage = () => {
   );
 };
 
-// EditorPage removed - using Editor from pages/Editor.js
-const EditorPagePlaceholder = null;
-
-  // Initialize canvas
-  useEffect(() => {
-    const fetchTemplate = async () => {
-      try {
-        const res = await axios.get(`${API}/templates/${templateId}`);
-        setTemplate(res.data);
-        setBackgroundColor(res.data.background_color);
-      } catch (error) {
-        console.error("Error fetching template:", error);
-        toast.error("Failed to load template");
-        navigate("/templates");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTemplate();
-  }, [templateId, navigate]);
+// EditorPage removed - now using Editor component from pages/Editor.js
 
   useEffect(() => {
     if (!template || !canvasRef.current || fabricRef.current) return;
