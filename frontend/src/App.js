@@ -841,6 +841,7 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/preview/:templateId" element={<TemplatePreview />} />
           <Route path="/editor/:templateId" element={<EditorPage />} />
           <Route path="/my-designs" element={<MyDesignsPage />} />
         </Routes>
