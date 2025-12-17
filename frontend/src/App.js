@@ -399,6 +399,7 @@ function App() {
           <Route path="/preview/:templateId" element={<TemplatePreview />} />
           <Route path="/editor/:templateId" element={<Editor />} />
           <Route path="/my-designs" element={<MyDesignsPage />} />
+          <Route path="/admin" element={<AdminPanel />} />
         </Routes>
       </BrowserRouter>
     </div>
