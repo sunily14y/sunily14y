@@ -135,7 +135,7 @@ const HomePage = () => {
             {templates.slice(0, 8).map((template) => (
               <div
                 key={template.id}
-                onClick={() => navigate(`/editor/${template.id}`)}
+                onClick={() => navigate(`/preview/${template.id}`)}
                 className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transform hover:scale-105 transition-all cursor-pointer group"
                 data-testid={`template-card-${template.id}`}
               >
