@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, useNavigate, useParams, Link } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
 import TemplatePreview from "@/pages/TemplatePreview";
@@ -11,16 +11,7 @@ const API = `${BACKEND_URL}/api`;
 
 // ===================== ICONS =====================
 const Icons = {
-  Home: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   Search: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
-  Download: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>,
-  Type: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" x2="15" y1="20" y2="20"/><line x1="12" x2="12" y1="4" y2="20"/></svg>,
-  Image: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>,
-  Trash: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>,
-  ArrowLeft: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>,
-  Save: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1-2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>,
-  Palette: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.555C21.965 6.012 17.461 2 12 2z"/></svg>,
-  Plus: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" x2="12" y1="5" y2="19"/><line x1="5" x2="19" y1="12" y2="12"/></svg>,
   Sparkles: () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/><path d="M5 3v4"/><path d="M19 17v4"/><path d="M3 5h4"/><path d="M17 19h4"/></svg>,
   ChevronRight: () => <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>,
 };
@@ -57,7 +48,6 @@ const HomePage = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Seed database first
         await axios.post(`${API}/seed`);
         const [catRes, tmplRes] = await Promise.all([
           axios.get(`${API}/categories`),
@@ -140,11 +130,7 @@ const HomePage = () => {
                 data-testid={`template-card-${template.id}`}
               >
                 <div className="aspect-[5/7] overflow-hidden">
-                  <img
-                    src={template.thumbnail}
-                    alt={template.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                  />
+                  <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                 </div>
                 <div className="p-4">
                   <h3 className="font-semibold text-gray-900 truncate">{template.name}</h3>
@@ -226,7 +212,6 @@ const TemplatesPage = () => {
         {/* Search & Filters */}
         <div className="flex flex-col md:flex-row gap-4 mb-8">
           <div className="relative flex-1">
-            <Icons.Search />
             <input
               type="text"
               placeholder="Search templates..."
@@ -294,11 +279,7 @@ const TemplatesPage = () => {
                 data-testid={`template-item-${template.id}`}
               >
                 <div className="aspect-[5/7] overflow-hidden">
-                  <img
-                    src={template.thumbnail}
-                    alt={template.name}
-                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
-                  />
+                  <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
                 </div>
                 <div className="p-4">
                   <h3 className="font-semibold text-gray-900 truncate">{template.name}</h3>
@@ -315,389 +296,6 @@ const TemplatesPage = () => {
             ))}
           </div>
         )}
-      </div>
-    </div>
-  );
-};
-
-// EditorPage removed - now using Editor component from pages/Editor.js
-
-  useEffect(() => {
-    if (!template || !canvasRef.current || fabricRef.current) return;
-
-    const canvas = new FabricCanvas(canvasRef.current, {
-      width: template.width,
-      height: template.height,
-      backgroundColor: template.background_color,
-      selection: true,
-    });
-
-    fabricRef.current = canvas;
-
-    // Load template elements
-    template.elements.forEach((el) => {
-      if (el.type === "text") {
-        const text = new Textbox(el.text || "Text", {
-          left: el.x - 100,
-          top: el.y - 20,
-          width: 200,
-          fontSize: el.fontSize || 24,
-          fontFamily: el.fontFamily || "Arial",
-          fontWeight: el.fontWeight || "normal",
-          fontStyle: el.fontStyle || "normal",
-          fill: el.fill || "#000000",
-          textAlign: el.textAlign || "center",
-          originX: "center",
-          originY: "center",
-        });
-        canvas.add(text);
-      }
-    });
-
-    // Selection event
-    canvas.on("selection:created", (e) => {
-      const obj = e.selected[0];
-      setSelectedObject(obj);
-      if (obj.type === "textbox") {
-        setTextColor(obj.fill);
-        setFontSize(obj.fontSize);
-        setFontFamily(obj.fontFamily);
-      }
-    });
-
-    canvas.on("selection:updated", (e) => {
-      const obj = e.selected[0];
-      setSelectedObject(obj);
-      if (obj.type === "textbox") {
-        setTextColor(obj.fill);
-        setFontSize(obj.fontSize);
-        setFontFamily(obj.fontFamily);
-      }
-    });
-
-    canvas.on("selection:cleared", () => {
-      setSelectedObject(null);
-    });
-
-    canvas.renderAll();
-
-    return () => {
-      canvas.dispose();
-      fabricRef.current = null;
-    };
-  }, [template]);
-
-  // Update background color
-  const handleBackgroundChange = (color) => {
-    setBackgroundColor(color);
-    if (fabricRef.current) {
-      fabricRef.current.backgroundColor = color;
-      fabricRef.current.renderAll();
-    }
-  };
-
-  // Add new text
-  const addText = () => {
-    if (!fabricRef.current) return;
-    const text = new Textbox("New Text", {
-      left: 250,
-      top: 350,
-      width: 200,
-      fontSize: 24,
-      fontFamily: "Arial",
-      fill: "#000000",
-      textAlign: "center",
-      originX: "center",
-      originY: "center",
-    });
-    fabricRef.current.add(text);
-    fabricRef.current.setActiveObject(text);
-    fabricRef.current.renderAll();
-  };
-
-  // Add image
-  const addImage = (e) => {
-    const file = e.target.files[0];
-    if (!file || !fabricRef.current) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const imgElement = document.createElement("img");
-      imgElement.src = event.target.result;
-      imgElement.onload = () => {
-        const img = new FabricImage(imgElement, {
-          left: 250,
-          top: 350,
-          originX: "center",
-          originY: "center",
-          scaleX: 0.3,
-          scaleY: 0.3,
-        });
-        fabricRef.current.add(img);
-        fabricRef.current.setActiveObject(img);
-        fabricRef.current.renderAll();
-      };
-    };
-    reader.readAsDataURL(file);
-  };
-
-  // Update text properties
-  const updateTextProperty = (property, value) => {
-    if (!selectedObject || selectedObject.type !== "textbox") return;
-    selectedObject.set(property, value);
-    fabricRef.current.renderAll();
-  };
-
-  // Delete selected object
-  const deleteSelected = () => {
-    if (!selectedObject || !fabricRef.current) return;
-    fabricRef.current.remove(selectedObject);
-    fabricRef.current.renderAll();
-    setSelectedObject(null);
-  };
-
-  // Download as image
-  const downloadImage = () => {
-    if (!fabricRef.current) return;
-    const dataURL = fabricRef.current.toDataURL({
-      format: "png",
-      quality: 1,
-      multiplier: 2,
-    });
-    const link = document.createElement("a");
-    link.download = `${template?.name || "design"}.png`;
-    link.href = dataURL;
-    link.click();
-    toast.success("Image downloaded successfully!");
-  };
-
-  // Save design
-  const saveDesign = async () => {
-    if (!fabricRef.current || !template) return;
-    setSaving(true);
-    try {
-      const elements = fabricRef.current.getObjects().map((obj) => {
-        const base = {
-          type: obj.type === "textbox" ? "text" : obj.type,
-          x: obj.left,
-          y: obj.top,
-          width: obj.width,
-          height: obj.height,
-          rotation: obj.angle,
-        };
-        if (obj.type === "textbox") {
-          return {
-            ...base,
-            text: obj.text,
-            fontSize: obj.fontSize,
-            fontFamily: obj.fontFamily,
-            fontWeight: obj.fontWeight,
-            fontStyle: obj.fontStyle,
-            fill: obj.fill,
-            textAlign: obj.textAlign,
-          };
-        }
-        return base;
-      });
-
-      await axios.post(`${API}/designs`, {
-        template_id: template.id,
-        name: template.name,
-        width: template.width,
-        height: template.height,
-        background_color: backgroundColor,
-        elements,
-      });
-      toast.success("Design saved successfully!");
-    } catch (error) {
-      console.error("Error saving design:", error);
-      toast.error("Failed to save design");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-purple-500 border-t-transparent"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-gray-100" data-testid="editor-page">
-      {/* Editor Header */}
-      <header className="bg-white border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={() => navigate("/templates")}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900"
-              data-testid="back-btn"
-            >
-              <Icons.ArrowLeft /> Back
-            </button>
-            <span className="text-gray-300">|</span>
-            <h1 className="font-semibold text-gray-900">{template?.name}</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={saveDesign}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              data-testid="save-btn"
-            >
-              <Icons.Save /> {saving ? "Saving..." : "Save"}
-            </button>
-            <button
-              onClick={downloadImage}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:shadow-lg transition-all"
-              data-testid="download-btn"
-            >
-              <Icons.Download /> Download
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div className="flex h-[calc(100vh-65px)]">
-        {/* Left Toolbar */}
-        <div className="w-64 bg-white border-r border-gray-200 p-4 overflow-y-auto">
-          <h2 className="font-semibold text-gray-900 mb-4">Tools</h2>
-          
-          {/* Add Elements */}
-          <div className="space-y-2 mb-6">
-            <button
-              onClick={addText}
-              className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-              data-testid="add-text-btn"
-            >
-              <Icons.Type /> Add Text
-            </button>
-            <label className="w-full flex items-center gap-2 px-4 py-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-              <Icons.Image /> Add Image
-              <input type="file" accept="image/*" onChange={addImage} className="hidden" data-testid="add-image-input" />
-            </label>
-          </div>
-
-          {/* Background Color */}
-          <div className="mb-6">
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Background Color</h3>
-            <div className="flex items-center gap-2">
-              <input
-                type="color"
-                value={backgroundColor}
-                onChange={(e) => handleBackgroundChange(e.target.value)}
-                className="w-10 h-10 rounded cursor-pointer"
-                data-testid="bg-color-input"
-              />
-              <input
-                type="text"
-                value={backgroundColor}
-                onChange={(e) => handleBackgroundChange(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-              />
-            </div>
-          </div>
-
-          {/* Text Properties (when text is selected) */}
-          {selectedObject && selectedObject.type === "textbox" && (
-            <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-700">Text Properties</h3>
-              
-              {/* Font Family */}
-              <div>
-                <label className="text-xs text-gray-500">Font</label>
-                <select
-                  value={fontFamily}
-                  onChange={(e) => {
-                    setFontFamily(e.target.value);
-                    updateTextProperty("fontFamily", e.target.value);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  data-testid="font-family-select"
-                >
-                  {fonts.map((font) => (
-                    <option key={font} value={font}>{font}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Font Size */}
-              <div>
-                <label className="text-xs text-gray-500">Size</label>
-                <input
-                  type="number"
-                  value={fontSize}
-                  onChange={(e) => {
-                    const size = parseInt(e.target.value);
-                    setFontSize(size);
-                    updateTextProperty("fontSize", size);
-                  }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  data-testid="font-size-input"
-                />
-              </div>
-
-              {/* Text Color */}
-              <div>
-                <label className="text-xs text-gray-500">Color</label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="color"
-                    value={textColor}
-                    onChange={(e) => {
-                      setTextColor(e.target.value);
-                      updateTextProperty("fill", e.target.value);
-                    }}
-                    className="w-10 h-10 rounded cursor-pointer"
-                    data-testid="text-color-input"
-                  />
-                  <input
-                    type="text"
-                    value={textColor}
-                    onChange={(e) => {
-                      setTextColor(e.target.value);
-                      updateTextProperty("fill", e.target.value);
-                    }}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                </div>
-              </div>
-
-              {/* Delete Button */}
-              <button
-                onClick={deleteSelected}
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
-                data-testid="delete-element-btn"
-              >
-                <Icons.Trash /> Delete Element
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Canvas Area */}
-        <div className="flex-1 flex items-center justify-center bg-gray-200 p-8 overflow-auto">
-          <div className="bg-white shadow-2xl rounded-lg overflow-hidden" style={{ width: template?.width, height: template?.height }}>
-            <canvas ref={canvasRef} data-testid="editor-canvas" />
-          </div>
-        </div>
-
-        {/* Right Panel - Quick Tips */}
-        <div className="w-64 bg-white border-l border-gray-200 p-4">
-          <h2 className="font-semibold text-gray-900 mb-4">Quick Tips</h2>
-          <div className="space-y-3 text-sm text-gray-600">
-            <p>📝 Click on any text to edit it</p>
-            <p>🎨 Use the color picker to change colors</p>
-            <p>📷 Add your own images</p>
-            <p>↔️ Drag elements to reposition</p>
-            <p>🔄 Use corners to resize</p>
-            <p>💾 Save to keep your design</p>
-            <p>⬇️ Download as PNG image</p>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -762,22 +360,13 @@ const MyDesignsPage = () => {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {designs.map((design) => (
-              <div
-                key={design.id}
-                className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all"
-                data-testid={`design-card-${design.id}`}
-              >
-                <div 
-                  className="aspect-[5/7] flex items-center justify-center"
-                  style={{ backgroundColor: design.background_color }}
-                >
+              <div key={design.id} className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transition-all" data-testid={`design-card-${design.id}`}>
+                <div className="aspect-[5/7] flex items-center justify-center" style={{ backgroundColor: design.background_color }}>
                   <span className="text-4xl">🎨</span>
                 </div>
                 <div className="p-4">
                   <h3 className="font-semibold text-gray-900 truncate">{design.name}</h3>
-                  <p className="text-sm text-gray-500">
-                    {new Date(design.updated_at).toLocaleDateString()}
-                  </p>
+                  <p className="text-sm text-gray-500">{new Date(design.updated_at).toLocaleDateString()}</p>
                   <div className="flex gap-2 mt-3">
                     <button
                       onClick={() => deleteDesign(design.id)}
@@ -807,7 +396,7 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/templates" element={<TemplatesPage />} />
           <Route path="/preview/:templateId" element={<TemplatePreview />} />
-          <Route path="/editor/:templateId" element={<EditorPage />} />
+          <Route path="/editor/:templateId" element={<Editor />} />
           <Route path="/my-designs" element={<MyDesignsPage />} />
         </Routes>
       </BrowserRouter>
