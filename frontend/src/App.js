@@ -6,6 +6,7 @@ import { Toaster, toast } from "sonner";
 import TemplatePreview from "@/pages/TemplatePreview";
 import Editor from "@/pages/Editor";
 import AdminPanel from "@/pages/Admin";
+import TemplateDesigner from "@/pages/TemplateDesigner";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
