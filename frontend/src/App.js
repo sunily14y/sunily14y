@@ -118,37 +118,74 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Featured Templates */}
-      <section className="py-16 px-4" data-testid="featured-section">
-        <div className="max-w-7xl mx-auto">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8 text-center">Featured Templates</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {templates.slice(0, 8).map((template) => (
-              <div
-                key={template.id}
-                onClick={() => navigate(`/preview/${template.id}`)}
-                className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transform hover:scale-105 transition-all cursor-pointer group"
-                data-testid={`template-card-${template.id}`}
-              >
-                <div className="aspect-[5/7] overflow-hidden">
-                  <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+      {/* Templates by Category */}
+      {categories.map((category) => {
+        const categoryTemplates = templates.filter(t => t.category_slug === category.slug);
+        if (categoryTemplates.length === 0) return null;
+        return (
+          <section key={category.id} className="py-12 px-4" data-testid={`section-${category.slug}`}>
+            <div className="max-w-7xl mx-auto">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{category.icon}</span>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">{category.name}</h2>
+                    <p className="text-gray-500 text-sm">{category.description}</p>
+                  </div>
                 </div>
-                <div className="p-4">
-                  <h3 className="font-semibold text-gray-900 truncate">{template.name}</h3>
-                  <p className="text-sm text-gray-500 capitalize">{template.category_slug.replace('-', ' ')}</p>
-                </div>
+                <button
+                  onClick={() => navigate(`/templates?category=${category.slug}`)}
+                  className="text-purple-600 hover:text-purple-700 font-medium flex items-center gap-1"
+                >
+                  View all <Icons.ChevronRight />
+                </button>
               </div>
-            ))}
-          </div>
-          <div className="text-center mt-10">
-            <button
-              onClick={() => navigate("/templates")}
-              className="inline-flex items-center gap-2 border-2 border-purple-600 text-purple-600 px-6 py-3 rounded-full font-semibold hover:bg-purple-600 hover:text-white transition-all"
-              data-testid="view-all-templates-btn"
-            >
-              View All Templates <Icons.ChevronRight />
-            </button>
-          </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {categoryTemplates.slice(0, 5).map((template) => (
+                  <div
+                    key={template.id}
+                    onClick={() => navigate(`/preview/${template.id}`)}
+                    className="bg-white rounded-xl overflow-hidden shadow-md hover:shadow-xl transform hover:scale-105 transition-all cursor-pointer group"
+                    data-testid={`template-card-${template.id}`}
+                  >
+                    <div className="aspect-[5/7] overflow-hidden">
+                      {template.thumbnail ? (
+                        <img src={template.thumbnail} alt={template.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center" style={{ backgroundColor: template.background_color || '#f0f0f0' }}>
+                          <span className="text-4xl">{category.icon}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <h3 className="font-medium text-gray-900 truncate text-sm">{template.name}</h3>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-green-600 font-medium">Free</span>
+                        {template.editable_zones?.length > 0 && (
+                          <span className="text-xs text-gray-400">{template.editable_zones.length} editable</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        );
+      })}
+
+      {/* View All Templates CTA */}
+      <section className="py-12 px-4 bg-gradient-to-r from-purple-600 to-pink-600">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-3xl font-bold text-white mb-4">Ready to Create?</h2>
+          <p className="text-purple-100 mb-6">Browse our complete collection of customizable templates</p>
+          <button
+            onClick={() => navigate("/templates")}
+            className="inline-flex items-center gap-2 bg-white text-purple-600 px-8 py-4 rounded-full font-semibold hover:shadow-lg transform hover:scale-105 transition-all"
+            data-testid="view-all-templates-btn"
+          >
+            Browse All Templates <Icons.ChevronRight />
+          </button>
         </div>
       </section>
 
