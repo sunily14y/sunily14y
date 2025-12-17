@@ -3,8 +3,8 @@ import "@/App.css";
 import { BrowserRouter, Routes, Route, useNavigate, useParams, Link } from "react-router-dom";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
-import { Canvas as FabricCanvas, Textbox, Rect, Image as FabricImage } from "fabric";
 import TemplatePreview from "@/pages/TemplatePreview";
+import Editor from "@/pages/Editor";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
