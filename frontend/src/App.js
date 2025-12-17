@@ -320,24 +320,8 @@ const TemplatesPage = () => {
   );
 };
 
-// ===================== EDITOR PAGE =====================
-const EditorPage = () => {
-  const { templateId } = useParams();
-  const navigate = useNavigate();
-  const canvasRef = useRef(null);
-  const fabricRef = useRef(null);
-  const [template, setTemplate] = useState(null);
-  const [selectedObject, setSelectedObject] = useState(null);
-  const [backgroundColor, setBackgroundColor] = useState("#ffffff");
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
-  // Text properties
-  const [textColor, setTextColor] = useState("#000000");
-  const [fontSize, setFontSize] = useState(24);
-  const [fontFamily, setFontFamily] = useState("Arial");
-
-  const fonts = ["Arial", "Georgia", "Times New Roman", "Courier New", "Verdana", "Comic Sans MS", "Impact", "Arial Black", "Trebuchet MS", "Palatino"];
+// EditorPage removed - using Editor from pages/Editor.js
+const EditorPagePlaceholder = null;
 
   // Initialize canvas
   useEffect(() => {
