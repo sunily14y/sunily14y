@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { View, StyleSheet, Platform } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -21,16 +22,18 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <View style={styles.container}>
-      <StatusBar hidden />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: 'fade',
-          contentStyle: { backgroundColor: '#1a0f00' },
-        }}
-      />
-    </View>
+    <SafeAreaProvider>
+      <View style={styles.container}>
+        <StatusBar hidden />
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            animation: 'fade',
+            contentStyle: { backgroundColor: '#1a0f00' },
+          }}
+        />
+      </View>
+    </SafeAreaProvider>
   );
 }
 
