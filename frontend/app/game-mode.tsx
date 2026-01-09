@@ -379,6 +379,58 @@ export default function GameModeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Create Room Modal */}
+      <Modal visible={showCreateRoomModal} transparent animationType="fade" onRequestClose={() => setShowCreateRoomModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.createRoomModalContent}>
+            <View style={styles.createRoomIcon}>
+              <Ionicons name="add-circle" size={50} color="#9B59B6" />
+            </View>
+            <Text style={styles.createRoomModalTitle}>Create Game Room</Text>
+            <Text style={styles.createRoomModalSubtitle}>Start a private room and invite your friends to play UNO together!</Text>
+            
+            <View style={styles.createRoomFeatures}>
+              <View style={styles.featureRow}>
+                <Ionicons name="people" size={20} color="#8B4513" />
+                <Text style={styles.featureText}>Up to 4 players</Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Ionicons name="share-social" size={20} color="#8B4513" />
+                <Text style={styles.featureText}>Share room code or link</Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Ionicons name="play-circle" size={20} color="#8B4513" />
+                <Text style={styles.featureText}>Start anytime with 2+ players</Text>
+              </View>
+            </View>
+
+            <View style={styles.createRoomButtons}>
+              <TouchableOpacity 
+                style={styles.cancelCreateButton} 
+                onPress={() => setShowCreateRoomModal(false)}
+                disabled={creatingRoom}
+              >
+                <Text style={styles.cancelCreateText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.confirmCreateButton, creatingRoom && styles.buttonDisabled]} 
+                onPress={handleConfirmCreateRoom}
+                disabled={creatingRoom}
+              >
+                {creatingRoom ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="add" size={20} color="#fff" />
+                    <Text style={styles.confirmCreateText}>Create</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
