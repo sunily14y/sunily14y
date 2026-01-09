@@ -1,9 +1,11 @@
+import React from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { View, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AuthProvider } from '../src/context/AuthContext';
 
 export default function RootLayout() {
   useEffect(() => {
@@ -14,7 +16,6 @@ export default function RootLayout() {
           await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE);
         }
       } catch (error) {
-        // Orientation lock not supported (e.g., web in iframe)
         console.log('Orientation lock not supported:', error);
       }
     };
@@ -22,18 +23,20 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <SafeAreaProvider>
-      <View style={styles.container}>
-        <StatusBar hidden />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            animation: 'fade',
-            contentStyle: { backgroundColor: '#1a0f00' },
-          }}
-        />
-      </View>
-    </SafeAreaProvider>
+    <AuthProvider>
+      <SafeAreaProvider>
+        <View style={styles.container}>
+          <StatusBar hidden />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              animation: 'fade',
+              contentStyle: { backgroundColor: '#1a0f00' },
+            }}
+          />
+        </View>
+      </SafeAreaProvider>
+    </AuthProvider>
   );
 }
 

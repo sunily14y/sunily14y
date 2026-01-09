@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,8 +8,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
-from datetime import datetime
-
+from datetime import datetime, timezone, timedelta
+import httpx
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -19,24 +19,48 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'uno_game')]
 
-# Create the main app without a prefix
+# Create the main app
 app = FastAPI(title="UNO Game API")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# Emergent Auth URL
+EMERGENT_AUTH_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 
-# Define Models
+
+# ==================== MODELS ====================
+
+class User(BaseModel):
+    user_id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    created_at: datetime
+
+class UserSession(BaseModel):
+    user_id: str
+    session_token: str
+    expires_at: datetime
+    created_at: datetime
+
+class SessionDataResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    picture: Optional[str] = None
+    session_token: str
+
 class GameResult(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
     player_name: str
     won: bool
     difficulty: str
-    opponent_type: str  # 'ai' or 'human'
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    opponent_type: str
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class GameResultCreate(BaseModel):
-    player_name: str
     won: bool
     difficulty: str
     opponent_type: str
@@ -56,29 +80,221 @@ class PlayerStats(BaseModel):
     games_vs_ai: int
     games_vs_human: int
 
+class FriendRequest(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    from_user_id: str
+    to_user_id: str
+    status: str = "pending"  # pending, accepted, rejected
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# API Routes
+class Friend(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    picture: Optional[str] = None
+
+class GameHistoryItem(BaseModel):
+    id: str
+    opponent_name: str
+    opponent_type: str
+    difficulty: str
+    won: bool
+    timestamp: datetime
+
+
+# ==================== AUTH HELPERS ====================
+
+async def get_session_token(request: Request) -> Optional[str]:
+    """Get session token from cookie or Authorization header"""
+    # Try cookie first
+    session_token = request.cookies.get("session_token")
+    if session_token:
+        return session_token
+    
+    # Fall back to Authorization header
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        return auth_header[7:]
+    
+    return None
+
+async def get_current_user(request: Request) -> User:
+    """Get current authenticated user"""
+    session_token = await get_session_token(request)
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    session = await db.user_sessions.find_one(
+        {"session_token": session_token},
+        {"_id": 0}
+    )
+    
+    if not session:
+        raise HTTPException(status_code=401, detail="Invalid session")
+    
+    # Check expiry with timezone handling
+    expires_at = session["expires_at"]
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=401, detail="Session expired")
+    
+    user_doc = await db.users.find_one(
+        {"user_id": session["user_id"]},
+        {"_id": 0}
+    )
+    
+    if not user_doc:
+        raise HTTPException(status_code=401, detail="User not found")
+    
+    return User(**user_doc)
+
+async def get_optional_user(request: Request) -> Optional[User]:
+    """Get current user if authenticated, None otherwise"""
+    try:
+        return await get_current_user(request)
+    except HTTPException:
+        return None
+
+
+# ==================== AUTH ROUTES ====================
+
+@api_router.post("/auth/exchange")
+async def exchange_session_id(request: Request, response: Response):
+    """Exchange session_id for session_token"""
+    body = await request.json()
+    session_id = body.get("session_id")
+    
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id required")
+    
+    # Call Emergent Auth API
+    async with httpx.AsyncClient() as client:
+        auth_response = await client.get(
+            EMERGENT_AUTH_URL,
+            headers={"X-Session-ID": session_id}
+        )
+        
+        if auth_response.status_code != 200:
+            raise HTTPException(status_code=401, detail="Invalid session_id")
+        
+        user_data = auth_response.json()
+    
+    session_data = SessionDataResponse(**user_data)
+    
+    # Check if user exists
+    existing_user = await db.users.find_one(
+        {"email": session_data.email},
+        {"_id": 0}
+    )
+    
+    if existing_user:
+        user_id = existing_user["user_id"]
+    else:
+        # Create new user
+        user_id = f"user_{uuid.uuid4().hex[:12]}"
+        await db.users.insert_one({
+            "user_id": user_id,
+            "email": session_data.email,
+            "name": session_data.name,
+            "picture": session_data.picture,
+            "created_at": datetime.now(timezone.utc)
+        })
+    
+    # Create session
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": session_data.session_token,
+        "expires_at": expires_at,
+        "created_at": datetime.now(timezone.utc)
+    })
+    
+    # Set cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_data.session_token,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=7 * 24 * 60 * 60
+    )
+    
+    # Get user data
+    user_doc = await db.users.find_one({"user_id": user_id}, {"_id": 0})
+    
+    return {
+        "session_token": session_data.session_token,
+        "user": user_doc
+    }
+
+@api_router.get("/auth/me")
+async def get_me(current_user: User = Depends(get_current_user)):
+    """Get current user info"""
+    return current_user
+
+@api_router.post("/auth/logout")
+async def logout(request: Request, response: Response):
+    """Logout user"""
+    session_token = await get_session_token(request)
+    if session_token:
+        await db.user_sessions.delete_one({"session_token": session_token})
+    
+    response.delete_cookie(key="session_token", path="/")
+    return {"message": "Logged out successfully"}
+
+@api_router.get("/auth/check")
+async def check_auth(request: Request):
+    """Check if user is authenticated"""
+    user = await get_optional_user(request)
+    return {"authenticated": user is not None, "user": user}
+
+
+# ==================== GAME ROUTES ====================
+
 @api_router.get("/")
 async def root():
     return {"message": "UNO Game API", "version": "1.0.0"}
 
 @api_router.post("/games", response_model=GameResult)
-async def create_game_result(game: GameResultCreate):
+async def create_game_result(
+    game: GameResultCreate,
+    current_user: User = Depends(get_current_user)
+):
     """Save a game result"""
-    game_dict = game.dict()
-    game_obj = GameResult(**game_dict)
+    game_obj = GameResult(
+        user_id=current_user.user_id,
+        player_name=current_user.name,
+        **game.dict()
+    )
     await db.games.insert_one(game_obj.dict())
     return game_obj
 
-@api_router.get("/games", response_model=List[GameResult])
-async def get_games(player_name: Optional[str] = None, limit: int = 50):
-    """Get game history, optionally filtered by player"""
-    query = {}
-    if player_name:
-        query["player_name"] = player_name
+@api_router.get("/games/history", response_model=List[GameHistoryItem])
+async def get_game_history(
+    limit: int = 50,
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's game history"""
+    games = await db.games.find(
+        {"user_id": current_user.user_id},
+        {"_id": 0}
+    ).sort("timestamp", -1).limit(limit).to_list(limit)
     
-    games = await db.games.find(query).sort("timestamp", -1).limit(limit).to_list(limit)
-    return [GameResult(**game) for game in games]
+    history = []
+    for game in games:
+        history.append(GameHistoryItem(
+            id=game["id"],
+            opponent_name="AI Opponent" if game["opponent_type"] == "ai" else "Local Player",
+            opponent_type=game["opponent_type"],
+            difficulty=game["difficulty"],
+            won=game["won"],
+            timestamp=game["timestamp"]
+        ))
+    
+    return history
 
 @api_router.get("/leaderboard", response_model=List[LeaderboardEntry])
 async def get_leaderboard(limit: int = 10):
@@ -116,14 +332,14 @@ async def get_leaderboard(limit: int = 10):
         win_rate=r["win_rate"]
     ) for r in results]
 
-@api_router.get("/stats/{player_name}", response_model=PlayerStats)
-async def get_player_stats(player_name: str):
-    """Get detailed stats for a specific player"""
+@api_router.get("/stats/me", response_model=PlayerStats)
+async def get_my_stats(current_user: User = Depends(get_current_user)):
+    """Get current user's stats"""
     pipeline = [
-        {"$match": {"player_name": player_name}},
+        {"$match": {"user_id": current_user.user_id}},
         {
             "$group": {
-                "_id": "$player_name",
+                "_id": "$user_id",
                 "wins": {"$sum": {"$cond": ["$won", 1, 0]}},
                 "losses": {"$sum": {"$cond": ["$won", 0, 1]}},
                 "total_games": {"$sum": 1},
@@ -141,7 +357,7 @@ async def get_player_stats(player_name: str):
     
     if not results:
         return PlayerStats(
-            player_name=player_name,
+            player_name=current_user.name,
             wins=0,
             losses=0,
             total_games=0,
@@ -154,7 +370,7 @@ async def get_player_stats(player_name: str):
     win_rate = (r["wins"] / r["total_games"] * 100) if r["total_games"] > 0 else 0
     
     return PlayerStats(
-        player_name=player_name,
+        player_name=current_user.name,
         wins=r["wins"],
         losses=r["losses"],
         total_games=r["total_games"],
@@ -162,6 +378,171 @@ async def get_player_stats(player_name: str):
         games_vs_ai=r["games_vs_ai"],
         games_vs_human=r["games_vs_human"]
     )
+
+
+# ==================== FRIENDS ROUTES ====================
+
+@api_router.get("/friends", response_model=List[Friend])
+async def get_friends(current_user: User = Depends(get_current_user)):
+    """Get user's friends list"""
+    # Get accepted friend requests where user is either sender or receiver
+    friend_requests = await db.friend_requests.find(
+        {
+            "$or": [
+                {"from_user_id": current_user.user_id, "status": "accepted"},
+                {"to_user_id": current_user.user_id, "status": "accepted"}
+            ]
+        },
+        {"_id": 0}
+    ).to_list(100)
+    
+    friend_ids = []
+    for fr in friend_requests:
+        if fr["from_user_id"] == current_user.user_id:
+            friend_ids.append(fr["to_user_id"])
+        else:
+            friend_ids.append(fr["from_user_id"])
+    
+    friends = []
+    for friend_id in friend_ids:
+        user_doc = await db.users.find_one({"user_id": friend_id}, {"_id": 0})
+        if user_doc:
+            friends.append(Friend(
+                user_id=user_doc["user_id"],
+                name=user_doc["name"],
+                email=user_doc["email"],
+                picture=user_doc.get("picture")
+            ))
+    
+    return friends
+
+@api_router.post("/friends/add")
+async def add_friend(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """Send friend request by email"""
+    body = await request.json()
+    friend_email = body.get("email")
+    
+    if not friend_email:
+        raise HTTPException(status_code=400, detail="Email required")
+    
+    if friend_email == current_user.email:
+        raise HTTPException(status_code=400, detail="Cannot add yourself")
+    
+    # Find user by email
+    friend_user = await db.users.find_one({"email": friend_email}, {"_id": 0})
+    if not friend_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Check if already friends or request exists
+    existing = await db.friend_requests.find_one({
+        "$or": [
+            {"from_user_id": current_user.user_id, "to_user_id": friend_user["user_id"]},
+            {"from_user_id": friend_user["user_id"], "to_user_id": current_user.user_id}
+        ]
+    })
+    
+    if existing:
+        if existing["status"] == "accepted":
+            raise HTTPException(status_code=400, detail="Already friends")
+        elif existing["status"] == "pending":
+            raise HTTPException(status_code=400, detail="Friend request already pending")
+    
+    # Create friend request
+    friend_request = FriendRequest(
+        from_user_id=current_user.user_id,
+        to_user_id=friend_user["user_id"]
+    )
+    await db.friend_requests.insert_one(friend_request.dict())
+    
+    return {"message": "Friend request sent"}
+
+@api_router.get("/friends/requests")
+async def get_friend_requests(current_user: User = Depends(get_current_user)):
+    """Get pending friend requests"""
+    requests = await db.friend_requests.find(
+        {"to_user_id": current_user.user_id, "status": "pending"},
+        {"_id": 0}
+    ).to_list(50)
+    
+    result = []
+    for req in requests:
+        from_user = await db.users.find_one({"user_id": req["from_user_id"]}, {"_id": 0})
+        if from_user:
+            result.append({
+                "id": req["id"],
+                "from_user": {
+                    "user_id": from_user["user_id"],
+                    "name": from_user["name"],
+                    "email": from_user["email"],
+                    "picture": from_user.get("picture")
+                },
+                "created_at": req["created_at"]
+            })
+    
+    return result
+
+@api_router.post("/friends/accept/{request_id}")
+async def accept_friend_request(
+    request_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Accept a friend request"""
+    result = await db.friend_requests.update_one(
+        {"id": request_id, "to_user_id": current_user.user_id, "status": "pending"},
+        {"$set": {"status": "accepted"}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    return {"message": "Friend request accepted"}
+
+@api_router.post("/friends/reject/{request_id}")
+async def reject_friend_request(
+    request_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Reject a friend request"""
+    result = await db.friend_requests.update_one(
+        {"id": request_id, "to_user_id": current_user.user_id, "status": "pending"},
+        {"$set": {"status": "rejected"}}
+    )
+    
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Request not found")
+    
+    return {"message": "Friend request rejected"}
+
+
+# ==================== PROFILE ROUTES ====================
+
+@api_router.put("/profile")
+async def update_profile(
+    request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """Update user profile"""
+    body = await request.json()
+    name = body.get("name")
+    
+    if not name or len(name.strip()) < 2:
+        raise HTTPException(status_code=400, detail="Name must be at least 2 characters")
+    
+    await db.users.update_one(
+        {"user_id": current_user.user_id},
+        {"$set": {"name": name.strip()}}
+    )
+    
+    # Also update name in games
+    await db.games.update_many(
+        {"user_id": current_user.user_id},
+        {"$set": {"player_name": name.strip()}}
+    )
+    
+    return {"message": "Profile updated"}
 
 
 # Include the router in the main app

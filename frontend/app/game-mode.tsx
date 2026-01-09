@@ -8,11 +8,12 @@ import {
   TextInput,
   Alert,
   Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../src/context/AuthContext';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -24,7 +25,7 @@ interface PlayerStats {
 }
 
 export default function GameModeScreen() {
-  const [playerName, setPlayerName] = useState('Player');
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
@@ -33,22 +34,31 @@ export default function GameModeScreen() {
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    loadPlayerData();
-  }, []);
+    if (!isLoading && !isAuthenticated) {
+      router.replace('/');
+    } else if (isAuthenticated) {
+      loadPlayerStats();
+    }
+  }, [isAuthenticated, isLoading]);
 
-  const loadPlayerData = async () => {
-    const name = await AsyncStorage.getItem('playerName');
-    setPlayerName(name || 'Player');
-    
-    // Fetch player stats
+  const loadPlayerStats = async () => {
     try {
-      const response = await fetch(`${BACKEND_URL}/api/stats/${encodeURIComponent(name || 'Player')}`);
-      const data = await response.json();
-      setStats(data);
+      const token = await getSessionToken();
+      const response = await fetch(`${BACKEND_URL}/api/stats/me`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStats(data);
+      }
     } catch (error) {
       console.error('Failed to fetch stats:', error);
-      setStats({ player_name: name || 'Player', wins: 0, total_games: 0, win_rate: 0 });
     }
+  };
+
+  const getSessionToken = async () => {
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    return await AsyncStorage.getItem('session_token');
   };
 
   const handleCreateRoom = () => {
@@ -66,7 +76,7 @@ export default function GameModeScreen() {
     }
     Alert.alert(
       'Coming Soon',
-      'Online multiplayer with room codes is coming soon! For now, try Practice Mode to play against AI.',
+      'Online multiplayer with room codes is coming soon!',
       [{ text: 'OK' }]
     );
     setShowJoinModal(false);
@@ -86,10 +96,23 @@ export default function GameModeScreen() {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('playerName');
+    await logout();
     setShowMenu(false);
     router.replace('/');
   };
+
+  const navigateTo = (route: string) => {
+    setShowMenu(false);
+    router.push(route as any);
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#FFD700" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -101,7 +124,7 @@ export default function GameModeScreen() {
           </View>
           <Text style={styles.headerTitle}>Game Lobby</Text>
         </View>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.menuButton}
           onPress={() => setShowMenu(true)}
         >
@@ -113,7 +136,7 @@ export default function GameModeScreen() {
       <View style={styles.divider} />
 
       {/* Content */}
-      <ScrollView 
+      <ScrollView
         style={styles.content}
         contentContainerStyle={[styles.contentContainer, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
@@ -149,10 +172,7 @@ export default function GameModeScreen() {
             <Text style={styles.cardTitle}>Create Room</Text>
           </View>
           <Text style={styles.cardSubtitle}>Start a private game</Text>
-          <TouchableOpacity 
-            style={styles.createRoomButton}
-            onPress={handleCreateRoom}
-          >
+          <TouchableOpacity style={styles.createRoomButton} onPress={handleCreateRoom}>
             <Ionicons name="add" size={20} color="#fff" />
             <Text style={styles.buttonText}>Create Room</Text>
           </TouchableOpacity>
@@ -165,10 +185,7 @@ export default function GameModeScreen() {
             <Text style={styles.cardTitle}>Join by Code</Text>
           </View>
           <Text style={styles.cardSubtitle}>Enter a friend's code</Text>
-          <TouchableOpacity 
-            style={styles.joinGameButton}
-            onPress={() => setShowJoinModal(true)}
-          >
+          <TouchableOpacity style={styles.joinGameButton} onPress={() => setShowJoinModal(true)}>
             <Ionicons name="enter-outline" size={20} color="#fff" />
             <Text style={styles.buttonText}>Join Game</Text>
           </TouchableOpacity>
@@ -181,17 +198,14 @@ export default function GameModeScreen() {
             <Text style={styles.cardTitle}>Practice Mode</Text>
           </View>
           <Text style={styles.cardSubtitle}>Play against AI</Text>
-          <TouchableOpacity 
-            style={styles.practiceButton}
-            onPress={handleStartPractice}
-          >
+          <TouchableOpacity style={styles.practiceButton} onPress={handleStartPractice}>
             <Text style={styles.robotEmoji}>🤖</Text>
             <Text style={styles.buttonText}>Start Practice</Text>
           </TouchableOpacity>
         </View>
 
         {/* Local Multiplayer Card */}
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.card}
           onPress={() => router.push({ pathname: '/game', params: { difficulty: 'local' } })}
         >
@@ -201,7 +215,7 @@ export default function GameModeScreen() {
               <Text style={styles.cardTitle}>Local 2 Players</Text>
             </View>
             <View style={styles.localMultiplayerRow}>
-              <Text style={styles.cardSubtitle}>Pass & play with a friend on this device</Text>
+              <Text style={styles.cardSubtitle}>Pass & play with a friend</Text>
               <Ionicons name="chevron-forward" size={24} color="#999" />
             </View>
           </View>
@@ -209,48 +223,47 @@ export default function GameModeScreen() {
       </ScrollView>
 
       {/* Menu Modal */}
-      <Modal
-        visible={showMenu}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowMenu(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowMenu(false)}
-        >
+      <Modal visible={showMenu} transparent animationType="fade" onRequestClose={() => setShowMenu(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowMenu(false)}>
           <View style={[styles.menuModal, { top: insets.top + 70 }]}>
             <View style={styles.menuHeader}>
               <View style={styles.menuAvatar}>
                 <Ionicons name="person" size={24} color="#FFD700" />
               </View>
-              <Text style={styles.menuPlayerName}>{playerName}</Text>
+              <Text style={styles.menuPlayerName}>{user?.name || 'Player'}</Text>
             </View>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                router.push('/leaderboard');
-              }}
-            >
-              <Ionicons name="trophy" size={22} color="#8B4513" />
-              <Text style={styles.menuItemText}>Leaderboard</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.menuItem}
-              onPress={() => {
-                setShowMenu(false);
-                router.push('/');
-              }}
-            >
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/game-mode')}>
               <Ionicons name="home" size={22} color="#8B4513" />
               <Text style={styles.menuItemText}>Home</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.menuItem, styles.menuItemDanger]}
-              onPress={handleLogout}
-            >
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/friends')}>
+              <Ionicons name="people" size={22} color="#8B4513" />
+              <Text style={styles.menuItemText}>Friends</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/profile')}>
+              <Ionicons name="person" size={22} color="#8B4513" />
+              <Text style={styles.menuItemText}>Profile</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/history')}>
+              <Ionicons name="time" size={22} color="#8B4513" />
+              <Text style={styles.menuItemText}>History</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/leaderboard')}>
+              <Ionicons name="trophy" size={22} color="#8B4513" />
+              <Text style={styles.menuItemText}>Leaderboard</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/tutorial')}>
+              <Ionicons name="book" size={22} color="#8B4513" />
+              <Text style={styles.menuItemText}>Tutorial</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={handleLogout}>
               <Ionicons name="log-out" size={22} color="#E74C3C" />
               <Text style={[styles.menuItemText, styles.menuItemTextDanger]}>Logout</Text>
             </TouchableOpacity>
@@ -259,12 +272,7 @@ export default function GameModeScreen() {
       </Modal>
 
       {/* Join Game Modal */}
-      <Modal
-        visible={showJoinModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowJoinModal(false)}
-      >
+      <Modal visible={showJoinModal} transparent animationType="fade" onRequestClose={() => setShowJoinModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.joinModal}>
             <Text style={styles.joinModalTitle}>Enter Room Code</Text>
@@ -278,19 +286,10 @@ export default function GameModeScreen() {
               autoCapitalize="characters"
             />
             <View style={styles.joinModalButtons}>
-              <TouchableOpacity 
-                style={styles.cancelButton}
-                onPress={() => {
-                  setShowJoinModal(false);
-                  setRoomCode('');
-                }}
-              >
+              <TouchableOpacity style={styles.cancelButton} onPress={() => { setShowJoinModal(false); setRoomCode(''); }}>
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.confirmJoinButton}
-                onPress={handleJoinGame}
-              >
+              <TouchableOpacity style={styles.confirmJoinButton} onPress={handleJoinGame}>
                 <Text style={styles.confirmJoinButtonText}>Join</Text>
               </TouchableOpacity>
             </View>
@@ -299,40 +298,23 @@ export default function GameModeScreen() {
       </Modal>
 
       {/* Difficulty Selection Modal */}
-      <Modal
-        visible={showDifficultyModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowDifficultyModal(false)}
-      >
+      <Modal visible={showDifficultyModal} transparent animationType="fade" onRequestClose={() => setShowDifficultyModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.difficultyModal}>
             <Text style={styles.difficultyModalTitle}>Select Difficulty</Text>
-            <TouchableOpacity 
-              style={[styles.difficultyOption, styles.easyOption]}
-              onPress={() => handleSelectDifficulty('easy')}
-            >
+            <TouchableOpacity style={[styles.difficultyOption, styles.easyOption]} onPress={() => handleSelectDifficulty('easy')}>
               <Ionicons name="happy" size={28} color="#fff" />
               <Text style={styles.difficultyText}>Easy</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.difficultyOption, styles.mediumOption]}
-              onPress={() => handleSelectDifficulty('medium')}
-            >
+            <TouchableOpacity style={[styles.difficultyOption, styles.mediumOption]} onPress={() => handleSelectDifficulty('medium')}>
               <Ionicons name="flash" size={28} color="#fff" />
               <Text style={styles.difficultyText}>Medium</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={[styles.difficultyOption, styles.hardOption]}
-              onPress={() => handleSelectDifficulty('hard')}
-            >
+            <TouchableOpacity style={[styles.difficultyOption, styles.hardOption]} onPress={() => handleSelectDifficulty('hard')}>
               <Ionicons name="skull" size={28} color="#fff" />
               <Text style={styles.difficultyText}>Hard</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.cancelDifficultyButton}
-              onPress={() => setShowDifficultyModal(false)}
-            >
+            <TouchableOpacity style={styles.cancelDifficultyButton} onPress={() => setShowDifficultyModal(false)}>
               <Text style={styles.cancelDifficultyText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -343,307 +325,57 @@ export default function GameModeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#F5F5F5',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 15,
-    backgroundColor: '#C4A574',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoCircle: {
-    width: 45,
-    height: 45,
-    borderRadius: 10,
-    backgroundColor: '#FFD700',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  logoText: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#8B4513',
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#fff',
-    fontStyle: 'italic',
-  },
-  menuButton: {
-    width: 45,
-    height: 45,
-    borderRadius: 10,
-    backgroundColor: '#FFD700',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  divider: {
-    height: 4,
-    backgroundColor: '#8B4513',
-  },
-  content: {
-    flex: 1,
-  },
-  contentContainer: {
-    padding: 16,
-  },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginLeft: 10,
-  },
-  cardSubtitle: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 16,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 5,
-  },
-  statItem: {
-    alignItems: 'center',
-  },
-  statNumber: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#D4A574',
-  },
-  rateNumber: {
-    color: '#D4A574',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#888',
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  robotEmoji: {
-    fontSize: 22,
-  },
-  createRoomButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#9B59B6',
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  joinGameButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#3498DB',
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  practiceButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2ECC71',
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  localMultiplayerContent: {
-    width: '100%',
-  },
-  localMultiplayerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuModal: {
-    position: 'absolute',
-    right: 20,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 10,
-    minWidth: 200,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  menuHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    marginBottom: 5,
-  },
-  menuAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#8B4513',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  menuPlayerName: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderRadius: 10,
-  },
-  menuItemText: {
-    fontSize: 16,
-    color: '#333',
-    marginLeft: 12,
-  },
-  menuItemDanger: {
-    marginTop: 5,
-  },
-  menuItemTextDanger: {
-    color: '#E74C3C',
-  },
-  joinModal: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 25,
-    width: '85%',
-    maxWidth: 350,
-    alignItems: 'center',
-  },
-  joinModalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
-  },
-  codeInput: {
-    width: '100%',
-    height: 55,
-    borderWidth: 2,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    fontSize: 24,
-    textAlign: 'center',
-    letterSpacing: 8,
-    color: '#333',
-    marginBottom: 20,
-  },
-  joinModalButtons: {
-    flexDirection: 'row',
-    gap: 12,
-    width: '100%',
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#f0f0f0',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
-  },
-  confirmJoinButton: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 12,
-    backgroundColor: '#3498DB',
-    alignItems: 'center',
-  },
-  confirmJoinButtonText: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  difficultyModal: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 25,
-    width: '85%',
-    maxWidth: 350,
-    alignItems: 'center',
-  },
-  difficultyModalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
-  },
-  difficultyOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    paddingVertical: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  easyOption: {
-    backgroundColor: '#4CAF50',
-  },
-  mediumOption: {
-    backgroundColor: '#FF9800',
-  },
-  hardOption: {
-    backgroundColor: '#F44336',
-  },
-  difficultyText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 10,
-  },
-  cancelDifficultyButton: {
-    marginTop: 8,
-    paddingVertical: 12,
-  },
-  cancelDifficultyText: {
-    fontSize: 16,
-    color: '#888',
-  },
+  container: { flex: 1, backgroundColor: '#F5F5F5' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingBottom: 15, backgroundColor: '#C4A574' },
+  headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  logoCircle: { width: 45, height: 45, borderRadius: 10, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  logoText: { fontSize: 26, fontWeight: 'bold', color: '#8B4513' },
+  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#fff', fontStyle: 'italic' },
+  menuButton: { width: 45, height: 45, borderRadius: 10, backgroundColor: '#FFD700', justifyContent: 'center', alignItems: 'center' },
+  divider: { height: 4, backgroundColor: '#8B4513' },
+  content: { flex: 1 },
+  contentContainer: { padding: 16 },
+  card: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 4 },
+  cardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  cardTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginLeft: 10 },
+  cardSubtitle: { fontSize: 14, color: '#888', marginBottom: 16 },
+  statsRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: 5 },
+  statItem: { alignItems: 'center' },
+  statNumber: { fontSize: 36, fontWeight: 'bold', color: '#D4A574' },
+  rateNumber: { color: '#D4A574' },
+  statLabel: { fontSize: 12, color: '#888', fontWeight: '600', marginTop: 4 },
+  robotEmoji: { fontSize: 22 },
+  createRoomButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#9B59B6', paddingVertical: 14, borderRadius: 12 },
+  joinGameButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#3498DB', paddingVertical: 14, borderRadius: 12 },
+  practiceButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#2ECC71', paddingVertical: 14, borderRadius: 12 },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 8 },
+  localMultiplayerContent: { width: '100%' },
+  localMultiplayerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.5)', justifyContent: 'center', alignItems: 'center' },
+  menuModal: { position: 'absolute', right: 20, backgroundColor: '#fff', borderRadius: 16, padding: 10, minWidth: 220, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12, elevation: 8 },
+  menuHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee', marginBottom: 5 },
+  menuAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#8B4513', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  menuPlayerName: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 10 },
+  menuItemText: { fontSize: 16, color: '#333', marginLeft: 12 },
+  menuItemDanger: { marginTop: 5 },
+  menuItemTextDanger: { color: '#E74C3C' },
+  joinModal: { backgroundColor: '#fff', borderRadius: 20, padding: 25, width: '85%', maxWidth: 350, alignItems: 'center' },
+  joinModalTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 20 },
+  codeInput: { width: '100%', height: 55, borderWidth: 2, borderColor: '#ddd', borderRadius: 12, fontSize: 24, textAlign: 'center', letterSpacing: 8, color: '#333', marginBottom: 20 },
+  joinModalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
+  cancelButton: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#f0f0f0', alignItems: 'center' },
+  cancelButtonText: { fontSize: 16, color: '#666', fontWeight: '600' },
+  confirmJoinButton: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#3498DB', alignItems: 'center' },
+  confirmJoinButtonText: { fontSize: 16, color: '#fff', fontWeight: 'bold' },
+  difficultyModal: { backgroundColor: '#fff', borderRadius: 20, padding: 25, width: '85%', maxWidth: 350, alignItems: 'center' },
+  difficultyModalTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginBottom: 20 },
+  difficultyOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', width: '100%', paddingVertical: 16, borderRadius: 12, marginBottom: 12 },
+  easyOption: { backgroundColor: '#4CAF50' },
+  mediumOption: { backgroundColor: '#FF9800' },
+  hardOption: { backgroundColor: '#F44336' },
+  difficultyText: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 10 },
+  cancelDifficultyButton: { marginTop: 8, paddingVertical: 12 },
+  cancelDifficultyText: { fontSize: 16, color: '#888' },
 });

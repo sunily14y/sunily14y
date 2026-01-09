@@ -4,81 +4,59 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Dimensions,
-  Animated,
   ScrollView,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const { width, height } = Dimensions.get('window');
+import { useAuth } from '../src/context/AuthContext';
 
 export default function HomeScreen() {
-  const [playerName, setPlayerName] = useState<string | null>(null);
-  const fadeAnim = React.useRef(new Animated.Value(0)).current;
-  const scaleAnim = React.useRef(new Animated.Value(0.8)).current;
+  const { user, isLoading, isAuthenticated, login } = useAuth();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
-    loadPlayerName();
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        tension: 50,
-        friction: 7,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, []);
-
-  const loadPlayerName = async () => {
-    try {
-      const name = await AsyncStorage.getItem('playerName');
-      setPlayerName(name);
-    } catch (error) {
-      console.log('Error loading player name:', error);
+    // If already authenticated, go to game lobby
+    if (isAuthenticated && !isLoading) {
+      router.replace('/game-mode');
     }
+  }, [isAuthenticated, isLoading]);
+
+  const handleSignIn = async () => {
+    await login();
   };
 
-  const handlePlayNow = () => {
-    if (playerName) {
-      router.push('/game-mode');
-    } else {
-      router.push('/enter-name');
-    }
-  };
+  if (isLoading) {
+    return (
+      <LinearGradient
+        colors={['#8B4513', '#5D2E0C', '#3D1E08', '#1a0f00']}
+        style={styles.container}
+      >
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFD700" />
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
       colors={['#8B4513', '#5D2E0C', '#3D1E08', '#1a0f00']}
       style={styles.container}
     >
-      <ScrollView 
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
-          { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }
+          { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View
-          style={[
-            styles.content,
-            {
-              opacity: fadeAnim,
-              transform: [{ scale: scaleAnim }],
-            },
-          ]}
-        >
+        <View style={styles.content}>
           {/* Logo Section */}
           <View style={styles.logoContainer}>
             <View style={styles.logoCircle}>
@@ -105,35 +83,24 @@ export default function HomeScreen() {
             all the classic UNO rules you love.
           </Text>
 
-          {/* Buttons */}
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity style={styles.playButton} onPress={handlePlayNow}>
-              <Ionicons name="play" size={20} color="#fff" />
-              <Text style={styles.playButtonText}>Play Now</Text>
+          {/* Sign In Buttons */}
+          <View style={styles.authContainer}>
+            <Text style={styles.authTitle}>Sign in to continue</Text>
+            
+            <TouchableOpacity style={styles.googleButton} onPress={handleSignIn}>
+              <Ionicons name="logo-google" size={22} color="#fff" />
+              <Text style={styles.googleButtonText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.leaderboardButton}
-              onPress={() => router.push('/leaderboard')}
-            >
-              <Text style={styles.leaderboardButtonText}>Leaderboard</Text>
+            <TouchableOpacity style={styles.appleButton} onPress={handleSignIn}>
+              <Ionicons name="logo-apple" size={22} color="#fff" />
+              <Text style={styles.appleButtonText}>Continue with Apple</Text>
             </TouchableOpacity>
-          </View>
 
-          {/* Stats Row */}
-          <View style={styles.statsContainer}>
-            <View style={styles.statItem}>
-              <Ionicons name="people" size={18} color="#B8860B" />
-              <Text style={styles.statText}>vs AI</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Ionicons name="flash" size={18} color="#B8860B" />
-              <Text style={styles.statText}>Fast Gameplay</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Ionicons name="shield-checkmark" size={18} color="#B8860B" />
-              <Text style={styles.statText}>Classic Rules</Text>
-            </View>
+            <TouchableOpacity style={styles.facebookButton} onPress={handleSignIn}>
+              <Ionicons name="logo-facebook" size={22} color="#fff" />
+              <Text style={styles.facebookButtonText}>Continue with Facebook</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Features */}
@@ -147,11 +114,11 @@ export default function HomeScreen() {
               <Text style={styles.featureText}>Leaderboards</Text>
             </View>
             <View style={styles.featureItem}>
-              <Ionicons name="color-palette" size={24} color="#FFD700" />
-              <Text style={styles.featureText}>Classic Cards</Text>
+              <Ionicons name="people" size={24} color="#FFD700" />
+              <Text style={styles.featureText}>Friends</Text>
             </View>
           </View>
-        </Animated.View>
+        </View>
       </ScrollView>
     </LinearGradient>
   );
@@ -176,27 +143,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: '100%',
   },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: '#F5DEB3',
+    fontSize: 16,
+    marginTop: 15,
+  },
   logoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 15,
   },
   logoCircle: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#DC143C',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   logoText: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#FFD700',
   },
   titleText: {
-    fontSize: 36,
+    fontSize: 42,
     fontWeight: 'bold',
     color: '#F5DEB3',
   },
@@ -236,60 +213,72 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#D2B48C',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 25,
     maxWidth: 500,
     lineHeight: 20,
     paddingHorizontal: 10,
   },
-  buttonContainer: {
+  authContainer: {
+    width: '100%',
+    maxWidth: 320,
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+  authTitle: {
+    color: '#F5DEB3',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 15,
+  },
+  googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 10,
-  },
-  playButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#DC143C',
-    paddingHorizontal: 24,
+    backgroundColor: '#DB4437',
     paddingVertical: 14,
-    borderRadius: 8,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    width: '100%',
+    marginBottom: 10,
   },
-  playButtonText: {
+  googleButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
-    marginLeft: 8,
+    marginLeft: 10,
   },
-  leaderboardButton: {
-    backgroundColor: '#B8860B',
-    paddingHorizontal: 24,
+  appleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000',
     paddingVertical: 14,
-    borderRadius: 8,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    width: '100%',
+    marginBottom: 10,
   },
-  leaderboardButtonText: {
+  appleButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+    marginLeft: 10,
   },
-  statsContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  statItem: {
+  facebookButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 10,
-    marginVertical: 5,
+    justifyContent: 'center',
+    backgroundColor: '#1877F2',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    width: '100%',
   },
-  statText: {
-    color: '#D2B48C',
-    fontSize: 13,
-    marginLeft: 6,
+  facebookButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 10,
   },
   featuresContainer: {
     flexDirection: 'row',
