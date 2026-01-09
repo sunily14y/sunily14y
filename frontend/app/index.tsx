@@ -15,7 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
 
 export default function HomeScreen() {
-  const { user, isLoading, isAuthenticated, login } = useAuth();
+  const { user, isLoading, isAuthenticated, login, loginAsGuest } = useAuth();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -27,6 +27,11 @@ export default function HomeScreen() {
 
   const handleSignIn = async () => {
     await login();
+  };
+
+  const handlePlayAsGuest = async () => {
+    await loginAsGuest();
+    router.replace('/game-mode');
   };
 
   if (isLoading) {
