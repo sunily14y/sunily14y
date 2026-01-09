@@ -651,30 +651,6 @@ async def get_room(room_code: str):
         "max_players": room.get("max_players", 4)
     }
 
-@api_router.post("/rooms/{room_code}/start")
-async def start_game(room_code: str, request: Request):
-    """Start the game (only creator can start)"""
-    body = await request.json()
-    user_id = body.get("user_id")
-    
-    room = await db.rooms.find_one({"room_code": room_code})
-    
-    if not room:
-        raise HTTPException(status_code=404, detail="Room not found")
-    
-    if room["creator_id"] != user_id:
-        raise HTTPException(status_code=403, detail="Only room creator can start the game")
-    
-    if len(room["players"]) < 2:
-        raise HTTPException(status_code=400, detail="Need at least 2 players to start")
-    
-    await db.rooms.update_one(
-        {"room_code": room_code},
-        {"$set": {"status": "playing"}}
-    )
-    
-    return {"message": "Game started", "status": "playing"}
-
 @api_router.post("/rooms/{room_code}/leave")
 async def leave_room(room_code: str, request: Request):
     """Leave a room"""
