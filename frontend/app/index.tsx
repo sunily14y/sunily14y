@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderRadius: 12,
     width: '100%',
-    marginBottom: 10,
+    marginBottom: 15,
   },
   appleButtonText: {
     color: '#fff',
@@ -275,18 +275,36 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 10,
   },
-  facebookButton: {
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: '100%',
+    marginBottom: 15,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(245, 222, 179, 0.3)',
+  },
+  dividerText: {
+    color: '#D2B48C',
+    paddingHorizontal: 15,
+    fontSize: 14,
+  },
+  guestButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#1877F2',
+    backgroundColor: '#F5DEB3',
     paddingVertical: 14,
     paddingHorizontal: 20,
     borderRadius: 12,
     width: '100%',
+    borderWidth: 2,
+    borderColor: '#B8860B',
   },
-  facebookButtonText: {
-    color: '#fff',
+  guestButtonText: {
+    color: '#8B4513',
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 10,
