@@ -337,19 +337,31 @@ export default function GameModeScreen() {
             <Text style={styles.joinModalTitle}>Enter Room Code</Text>
             <TextInput
               style={styles.codeInput}
-              placeholder="XXXX"
+              placeholder="0000"
               placeholderTextColor="#999"
               value={roomCode}
-              onChangeText={setRoomCode}
-              maxLength={6}
-              autoCapitalize="characters"
+              onChangeText={(text) => setRoomCode(text.replace(/[^0-9]/g, ''))}
+              maxLength={4}
+              keyboardType="number-pad"
             />
             <View style={styles.joinModalButtons}>
-              <TouchableOpacity style={styles.cancelButton} onPress={() => { setShowJoinModal(false); setRoomCode(''); }}>
+              <TouchableOpacity 
+                style={styles.cancelButton} 
+                onPress={() => { setShowJoinModal(false); setRoomCode(''); }}
+                disabled={joiningRoom}
+              >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmJoinButton} onPress={handleJoinGame}>
-                <Text style={styles.confirmJoinButtonText}>Join</Text>
+              <TouchableOpacity 
+                style={[styles.confirmJoinButton, joiningRoom && styles.buttonDisabled]} 
+                onPress={handleJoinGame}
+                disabled={joiningRoom}
+              >
+                {joiningRoom ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.confirmJoinButtonText}>Join</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>
