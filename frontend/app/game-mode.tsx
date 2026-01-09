@@ -25,7 +25,7 @@ interface PlayerStats {
 }
 
 export default function GameModeScreen() {
-  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  const { user, isAuthenticated, isLoading, isGuest, logout } = useAuth();
   const [stats, setStats] = useState<PlayerStats | null>(null);
   const [showMenu, setShowMenu] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
