@@ -700,6 +700,437 @@ async def leave_room(room_code: str, request: Request):
     return {"message": "Left room"}
 
 
+# ==================== MULTIPLAYER GAME ROUTES ====================
+
+import random
+
+def create_uno_deck():
+    """Create a standard UNO deck"""
+    cards = []
+    card_id = 0
+    colors = ['red', 'yellow', 'green', 'blue']
+    
+    for color in colors:
+        # One 0 per color
+        cards.append({"id": str(card_id), "color": color, "type": "number", "value": 0})
+        card_id += 1
+        
+        # Two of each 1-9 per color
+        for num in range(1, 10):
+            cards.append({"id": str(card_id), "color": color, "type": "number", "value": num})
+            card_id += 1
+            cards.append({"id": str(card_id), "color": color, "type": "number", "value": num})
+            card_id += 1
+        
+        # Two of each action card per color
+        for _ in range(2):
+            cards.append({"id": str(card_id), "color": color, "type": "skip"})
+            card_id += 1
+            cards.append({"id": str(card_id), "color": color, "type": "reverse"})
+            card_id += 1
+            cards.append({"id": str(card_id), "color": color, "type": "draw2"})
+            card_id += 1
+    
+    # Wild cards
+    for _ in range(4):
+        cards.append({"id": str(card_id), "color": "wild", "type": "wild"})
+        card_id += 1
+        cards.append({"id": str(card_id), "color": "wild", "type": "wild4"})
+        card_id += 1
+    
+    random.shuffle(cards)
+    return cards
+
+def can_play_card(card, top_card, selected_color):
+    """Check if a card can be played"""
+    # Wild cards can always be played
+    if card["type"] in ["wild", "wild4"]:
+        return True
+    
+    # Match color
+    current_color = selected_color or top_card["color"]
+    if card["color"] == current_color:
+        return True
+    
+    # Match number
+    if card["type"] == "number" and top_card["type"] == "number" and card.get("value") == top_card.get("value"):
+        return True
+    
+    # Match action type
+    if card["type"] == top_card["type"] and card["type"] != "number":
+        return True
+    
+    return False
+
+@api_router.post("/rooms/{room_code}/start")
+async def start_game(room_code: str, request: Request):
+    """Start the game and initialize game state"""
+    body = await request.json()
+    user_id = body.get("user_id")
+    
+    room = await db.rooms.find_one({"room_code": room_code})
+    
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    if room["creator_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only room creator can start the game")
+    
+    if len(room["players"]) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 players to start")
+    
+    # Create deck and deal cards
+    deck = create_uno_deck()
+    players_hands = {}
+    
+    for player in room["players"]:
+        hand = []
+        for _ in range(7):
+            if deck:
+                hand.append(deck.pop())
+        players_hands[player["user_id"]] = hand
+    
+    # Find first non-wild card for discard pile
+    discard_pile = []
+    while deck:
+        card = deck.pop()
+        if card["type"] == "number":
+            discard_pile.append(card)
+            break
+        else:
+            deck.insert(0, card)  # Put back at bottom
+    
+    # Initialize game state
+    game_state = {
+        "room_code": room_code,
+        "deck": deck,
+        "discard_pile": discard_pile,
+        "players_hands": players_hands,
+        "player_order": [p["user_id"] for p in room["players"]],
+        "current_player_index": 0,
+        "direction": 1,  # 1 = clockwise, -1 = counter-clockwise
+        "selected_color": discard_pile[0]["color"] if discard_pile else None,
+        "status": "playing",
+        "winner": None,
+        "last_action": None,
+        "uno_called": {},
+        "updated_at": datetime.now(timezone.utc)
+    }
+    
+    # Save game state
+    await db.game_states.update_one(
+        {"room_code": room_code},
+        {"$set": game_state},
+        upsert=True
+    )
+    
+    # Update room status
+    await db.rooms.update_one(
+        {"room_code": room_code},
+        {"$set": {"status": "playing"}}
+    )
+    
+    return {"message": "Game started", "status": "playing"}
+
+@api_router.get("/rooms/{room_code}/game-state")
+async def get_game_state(room_code: str, user_id: str):
+    """Get current game state for a player"""
+    game_state = await db.game_states.find_one({"room_code": room_code}, {"_id": 0})
+    
+    if not game_state:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    room = await db.rooms.find_one({"room_code": room_code}, {"_id": 0})
+    
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    # Build response with limited info (don't expose other players' cards)
+    players_info = []
+    for player in room["players"]:
+        pid = player["user_id"]
+        hand = game_state["players_hands"].get(pid, [])
+        players_info.append({
+            "user_id": pid,
+            "name": player["name"],
+            "card_count": len(hand),
+            "is_current": game_state["player_order"][game_state["current_player_index"]] == pid,
+            "is_creator": player.get("is_creator", False)
+        })
+    
+    # Get current player's hand
+    my_hand = game_state["players_hands"].get(user_id, [])
+    
+    return {
+        "room_code": room_code,
+        "status": game_state["status"],
+        "players": players_info,
+        "my_hand": my_hand,
+        "discard_pile": game_state["discard_pile"][-1] if game_state["discard_pile"] else None,
+        "deck_count": len(game_state["deck"]),
+        "current_player_id": game_state["player_order"][game_state["current_player_index"]],
+        "direction": game_state["direction"],
+        "selected_color": game_state["selected_color"],
+        "winner": game_state.get("winner"),
+        "last_action": game_state.get("last_action"),
+        "updated_at": game_state["updated_at"]
+    }
+
+@api_router.post("/rooms/{room_code}/play-card")
+async def play_card(room_code: str, request: Request):
+    """Play a card"""
+    body = await request.json()
+    user_id = body.get("user_id")
+    card_id = body.get("card_id")
+    chosen_color = body.get("chosen_color")  # For wild cards
+    
+    game_state = await db.game_states.find_one({"room_code": room_code})
+    
+    if not game_state:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    if game_state["status"] != "playing":
+        raise HTTPException(status_code=400, detail="Game is not in progress")
+    
+    # Check if it's this player's turn
+    current_player_id = game_state["player_order"][game_state["current_player_index"]]
+    if current_player_id != user_id:
+        raise HTTPException(status_code=400, detail="Not your turn")
+    
+    # Find the card in player's hand
+    hand = game_state["players_hands"].get(user_id, [])
+    card = None
+    card_index = None
+    for i, c in enumerate(hand):
+        if c["id"] == card_id:
+            card = c
+            card_index = i
+            break
+    
+    if card is None:
+        raise HTTPException(status_code=400, detail="Card not in hand")
+    
+    # Check if card can be played
+    top_card = game_state["discard_pile"][-1] if game_state["discard_pile"] else None
+    if top_card and not can_play_card(card, top_card, game_state["selected_color"]):
+        raise HTTPException(status_code=400, detail="Cannot play this card")
+    
+    # Remove card from hand
+    hand.pop(card_index)
+    game_state["players_hands"][user_id] = hand
+    
+    # Add card to discard pile
+    game_state["discard_pile"].append(card)
+    
+    # Handle card effects
+    direction = game_state["direction"]
+    skip_next = False
+    draw_amount = 0
+    new_color = card["color"] if card["color"] != "wild" else None
+    
+    room = await db.rooms.find_one({"room_code": room_code})
+    num_players = len(room["players"])
+    
+    if card["type"] == "reverse":
+        direction = -direction
+        if num_players == 2:
+            skip_next = True
+    elif card["type"] == "skip":
+        skip_next = True
+    elif card["type"] == "draw2":
+        draw_amount = 2
+        skip_next = True
+    elif card["type"] == "wild":
+        new_color = chosen_color or "red"
+    elif card["type"] == "wild4":
+        new_color = chosen_color or "red"
+        draw_amount = 4
+        skip_next = True
+    
+    game_state["direction"] = direction
+    game_state["selected_color"] = new_color
+    
+    # Calculate next player
+    next_index = (game_state["current_player_index"] + direction) % num_players
+    
+    # Handle draw cards for next player
+    if draw_amount > 0:
+        next_player_id = game_state["player_order"][next_index]
+        next_hand = game_state["players_hands"].get(next_player_id, [])
+        deck = game_state["deck"]
+        
+        for _ in range(draw_amount):
+            if not deck:
+                # Reshuffle discard pile
+                top = game_state["discard_pile"].pop()
+                deck = game_state["discard_pile"]
+                random.shuffle(deck)
+                game_state["discard_pile"] = [top]
+            if deck:
+                next_hand.append(deck.pop())
+        
+        game_state["players_hands"][next_player_id] = next_hand
+        game_state["deck"] = deck
+    
+    if skip_next:
+        next_index = (next_index + direction) % num_players
+    
+    game_state["current_player_index"] = next_index
+    
+    # Get player name for action
+    player_name = "Player"
+    for p in room["players"]:
+        if p["user_id"] == user_id:
+            player_name = p["name"]
+            break
+    
+    game_state["last_action"] = f"{player_name} played a card"
+    game_state["updated_at"] = datetime.now(timezone.utc)
+    
+    # Check for winner
+    if len(hand) == 0:
+        game_state["status"] = "finished"
+        game_state["winner"] = {"user_id": user_id, "name": player_name}
+    
+    # Save updated state
+    await db.game_states.update_one(
+        {"room_code": room_code},
+        {"$set": game_state}
+    )
+    
+    return {"success": True, "message": "Card played"}
+
+@api_router.post("/rooms/{room_code}/draw-card")
+async def draw_card(room_code: str, request: Request):
+    """Draw a card from the deck"""
+    body = await request.json()
+    user_id = body.get("user_id")
+    
+    game_state = await db.game_states.find_one({"room_code": room_code})
+    
+    if not game_state:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    if game_state["status"] != "playing":
+        raise HTTPException(status_code=400, detail="Game is not in progress")
+    
+    # Check if it's this player's turn
+    current_player_id = game_state["player_order"][game_state["current_player_index"]]
+    if current_player_id != user_id:
+        raise HTTPException(status_code=400, detail="Not your turn")
+    
+    deck = game_state["deck"]
+    discard_pile = game_state["discard_pile"]
+    
+    # Reshuffle if deck is empty
+    if not deck:
+        if len(discard_pile) > 1:
+            top = discard_pile.pop()
+            deck = discard_pile
+            random.shuffle(deck)
+            game_state["discard_pile"] = [top]
+    
+    if not deck:
+        raise HTTPException(status_code=400, detail="No cards left to draw")
+    
+    # Draw card
+    drawn_card = deck.pop()
+    hand = game_state["players_hands"].get(user_id, [])
+    hand.append(drawn_card)
+    game_state["players_hands"][user_id] = hand
+    game_state["deck"] = deck
+    
+    # Check if drawn card can be played
+    top_card = game_state["discard_pile"][-1] if game_state["discard_pile"] else None
+    can_play = can_play_card(drawn_card, top_card, game_state["selected_color"]) if top_card else True
+    
+    room = await db.rooms.find_one({"room_code": room_code})
+    player_name = "Player"
+    for p in room["players"]:
+        if p["user_id"] == user_id:
+            player_name = p["name"]
+            break
+    
+    game_state["last_action"] = f"{player_name} drew a card"
+    game_state["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.game_states.update_one(
+        {"room_code": room_code},
+        {"$set": game_state}
+    )
+    
+    return {
+        "success": True,
+        "drawn_card": drawn_card,
+        "can_play": can_play
+    }
+
+@api_router.post("/rooms/{room_code}/pass-turn")
+async def pass_turn(room_code: str, request: Request):
+    """Pass turn after drawing (if can't/won't play drawn card)"""
+    body = await request.json()
+    user_id = body.get("user_id")
+    
+    game_state = await db.game_states.find_one({"room_code": room_code})
+    
+    if not game_state:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    current_player_id = game_state["player_order"][game_state["current_player_index"]]
+    if current_player_id != user_id:
+        raise HTTPException(status_code=400, detail="Not your turn")
+    
+    room = await db.rooms.find_one({"room_code": room_code})
+    num_players = len(room["players"])
+    
+    # Move to next player
+    next_index = (game_state["current_player_index"] + game_state["direction"]) % num_players
+    game_state["current_player_index"] = next_index
+    game_state["updated_at"] = datetime.now(timezone.utc)
+    
+    await db.game_states.update_one(
+        {"room_code": room_code},
+        {"$set": game_state}
+    )
+    
+    return {"success": True, "message": "Turn passed"}
+
+@api_router.post("/rooms/{room_code}/call-uno")
+async def call_uno(room_code: str, request: Request):
+    """Call UNO when having one card"""
+    body = await request.json()
+    user_id = body.get("user_id")
+    
+    game_state = await db.game_states.find_one({"room_code": room_code})
+    
+    if not game_state:
+        raise HTTPException(status_code=404, detail="Game not found")
+    
+    hand = game_state["players_hands"].get(user_id, [])
+    
+    if len(hand) != 1:
+        raise HTTPException(status_code=400, detail="Can only call UNO with one card")
+    
+    game_state["uno_called"][user_id] = True
+    game_state["updated_at"] = datetime.now(timezone.utc)
+    
+    room = await db.rooms.find_one({"room_code": room_code})
+    player_name = "Player"
+    for p in room["players"]:
+        if p["user_id"] == user_id:
+            player_name = p["name"]
+            break
+    
+    game_state["last_action"] = f"{player_name} called UNO!"
+    
+    await db.game_states.update_one(
+        {"room_code": room_code},
+        {"$set": game_state}
+    )
+    
+    return {"success": True, "message": "UNO called!"}
+
+
 # ==================== PROFILE ROUTES ====================
 
 @api_router.put("/profile")
