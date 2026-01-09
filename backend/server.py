@@ -517,6 +517,189 @@ async def reject_friend_request(
     return {"message": "Friend request rejected"}
 
 
+# ==================== ROOM/MULTIPLAYER ROUTES ====================
+
+class Room(BaseModel):
+    room_code: str
+    creator_id: str
+    creator_name: str
+    players: List[dict] = []
+    status: str = "waiting"  # waiting, playing, finished
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    max_players: int = 4
+
+class RoomPlayer(BaseModel):
+    user_id: str
+    name: str
+    is_creator: bool = False
+    joined_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+def generate_room_code() -> str:
+    """Generate a unique 4-digit room code"""
+    import random
+    return ''.join([str(random.randint(0, 9)) for _ in range(4)])
+
+@api_router.post("/rooms/create")
+async def create_room(request: Request):
+    """Create a new game room"""
+    body = await request.json()
+    user_id = body.get("user_id")
+    user_name = body.get("user_name", "Player")
+    
+    if not user_id:
+        raise HTTPException(status_code=400, detail="user_id required")
+    
+    # Generate unique room code
+    room_code = generate_room_code()
+    
+    # Make sure code is unique
+    while await db.rooms.find_one({"room_code": room_code, "status": "waiting"}):
+        room_code = generate_room_code()
+    
+    # Create room
+    room = {
+        "room_code": room_code,
+        "creator_id": user_id,
+        "creator_name": user_name,
+        "players": [{
+            "user_id": user_id,
+            "name": user_name,
+            "is_creator": True,
+            "joined_at": datetime.now(timezone.utc)
+        }],
+        "status": "waiting",
+        "created_at": datetime.now(timezone.utc),
+        "max_players": 4
+    }
+    
+    await db.rooms.insert_one(room)
+    
+    return {
+        "room_code": room_code,
+        "creator_id": user_id,
+        "players": room["players"],
+        "status": "waiting"
+    }
+
+@api_router.post("/rooms/join")
+async def join_room(request: Request):
+    """Join an existing room by code"""
+    body = await request.json()
+    room_code = body.get("room_code")
+    user_id = body.get("user_id")
+    user_name = body.get("user_name", "Player")
+    
+    if not room_code or not user_id:
+        raise HTTPException(status_code=400, detail="room_code and user_id required")
+    
+    # Find room
+    room = await db.rooms.find_one({"room_code": room_code, "status": "waiting"})
+    
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found or game already started")
+    
+    # Check if room is full
+    if len(room["players"]) >= room.get("max_players", 4):
+        raise HTTPException(status_code=400, detail="Room is full")
+    
+    # Check if already in room
+    if any(p["user_id"] == user_id for p in room["players"]):
+        return {
+            "room_code": room_code,
+            "players": room["players"],
+            "status": room["status"],
+            "is_creator": room["creator_id"] == user_id
+        }
+    
+    # Add player to room
+    new_player = {
+        "user_id": user_id,
+        "name": user_name,
+        "is_creator": False,
+        "joined_at": datetime.now(timezone.utc)
+    }
+    
+    await db.rooms.update_one(
+        {"room_code": room_code},
+        {"$push": {"players": new_player}}
+    )
+    
+    # Get updated room
+    room = await db.rooms.find_one({"room_code": room_code})
+    
+    return {
+        "room_code": room_code,
+        "players": room["players"],
+        "status": room["status"],
+        "is_creator": False
+    }
+
+@api_router.get("/rooms/{room_code}")
+async def get_room(room_code: str):
+    """Get room status and players"""
+    room = await db.rooms.find_one({"room_code": room_code}, {"_id": 0})
+    
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    return {
+        "room_code": room["room_code"],
+        "creator_id": room["creator_id"],
+        "creator_name": room["creator_name"],
+        "players": room["players"],
+        "status": room["status"],
+        "max_players": room.get("max_players", 4)
+    }
+
+@api_router.post("/rooms/{room_code}/start")
+async def start_game(room_code: str, request: Request):
+    """Start the game (only creator can start)"""
+    body = await request.json()
+    user_id = body.get("user_id")
+    
+    room = await db.rooms.find_one({"room_code": room_code})
+    
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    if room["creator_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only room creator can start the game")
+    
+    if len(room["players"]) < 2:
+        raise HTTPException(status_code=400, detail="Need at least 2 players to start")
+    
+    await db.rooms.update_one(
+        {"room_code": room_code},
+        {"$set": {"status": "playing"}}
+    )
+    
+    return {"message": "Game started", "status": "playing"}
+
+@api_router.post("/rooms/{room_code}/leave")
+async def leave_room(room_code: str, request: Request):
+    """Leave a room"""
+    body = await request.json()
+    user_id = body.get("user_id")
+    
+    room = await db.rooms.find_one({"room_code": room_code})
+    
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    # Remove player from room
+    await db.rooms.update_one(
+        {"room_code": room_code},
+        {"$pull": {"players": {"user_id": user_id}}}
+    )
+    
+    # If creator leaves, delete room
+    if room["creator_id"] == user_id:
+        await db.rooms.delete_one({"room_code": room_code})
+        return {"message": "Room deleted"}
+    
+    return {"message": "Left room"}
+
+
 # ==================== PROFILE ROUTES ====================
 
 @api_router.put("/profile")
