@@ -360,6 +360,7 @@ const styles = StyleSheet.create({
   menuHeader: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#eee', marginBottom: 5 },
   menuAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#8B4513', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   menuPlayerName: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  guestBadge: { fontSize: 11, color: '#FF9800', fontWeight: '600' },
   menuItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 10 },
   menuItemText: { fontSize: 16, color: '#333', marginLeft: 12 },
   menuItemDanger: { marginTop: 5 },
