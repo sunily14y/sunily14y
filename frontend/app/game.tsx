@@ -78,14 +78,16 @@ export default function GameScreen() {
   const saveGameResult = async () => {
     if (!winner) return;
     try {
-      const name = await AsyncStorage.getItem('playerName');
+      const token = await AsyncStorage.getItem('session_token');
       const playerWon = winner.id === 'player1';
       
       await fetch(`${BACKEND_URL}/api/games`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          player_name: name || 'Player',
           won: playerWon,
           difficulty: difficulty || 'medium',
           opponent_type: difficulty === 'local' ? 'human' : 'ai',
