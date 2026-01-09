@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,10 @@ import {
   Alert,
   ActivityIndicator,
   Share,
-  Platform,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons'
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../src/context/AuthContext';
@@ -39,22 +39,22 @@ export default function WaitingRoomScreen() {
   const { user } = useAuth();
   const [room, setRoom] = useState<RoomData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<'code' | 'link' | null>(null);
+  const [starting, setStarting] = useState(false);
   const insets = useSafeAreaInsets();
 
   const inviteLink = `https://uno-cards-4.preview.emergentagent.com/join?code=${roomCode}`;
+  const maxPlayers = room?.max_players || 6;
 
   useEffect(() => {
     if (roomCode) {
       fetchRoom();
-      // Poll for updates every 2 seconds
       const interval = setInterval(fetchRoom, 2000);
       return () => clearInterval(interval);
     }
   }, [roomCode]);
 
   useEffect(() => {
-    // Check if game started
     if (room?.status === 'playing') {
       router.replace({
         pathname: '/multiplayer-game',
@@ -83,17 +83,17 @@ export default function WaitingRoomScreen() {
 
   const handleCopyCode = async () => {
     await Clipboard.setStringAsync(roomCode || '');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied('code');
+    setTimeout(() => setCopied(null), 2000);
   };
 
   const handleCopyLink = async () => {
     await Clipboard.setStringAsync(inviteLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied('link');
+    setTimeout(() => setCopied(null), 2000);
   };
 
-  const handleShare = async () => {
+  const handleInvite = async () => {
     try {
       await Share.share({
         message: `Join my UNO game!\n\nRoom Code: ${roomCode}\n\nOr click: ${inviteLink}`,
@@ -110,6 +110,7 @@ export default function WaitingRoomScreen() {
       return;
     }
 
+    setStarting(true);
     try {
       const response = await fetch(`${BACKEND_URL}/api/rooms/${roomCode}/start`, {
         method: 'POST',
@@ -128,6 +129,8 @@ export default function WaitingRoomScreen() {
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to start game');
+    } finally {
+      setStarting(false);
     }
   };
 
@@ -159,173 +162,431 @@ export default function WaitingRoomScreen() {
     );
   };
 
+  const handleDeleteRoom = () => {
+    Alert.alert(
+      'Delete Room',
+      'Are you sure you want to delete this room?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await fetch(`${BACKEND_URL}/api/rooms/${roomCode}/leave`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: user?.user_id }),
+              });
+              router.replace('/game-mode');
+            } catch (error) {
+              router.replace('/game-mode');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const isCreator = room?.creator_id === user?.user_id;
+  const playerCount = room?.players.length || 0;
+  const spotsLeft = maxPlayers - playerCount;
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#8B4513" />
-        <Text style={styles.loadingText}>Loading room...</Text>
-      </View>
+      <LinearGradient colors={['#8B5A2B', '#6B4423', '#4A2C17']} style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#FFD700" />
+          <Text style={styles.loadingText}>Loading room...</Text>
+        </View>
+      </LinearGradient>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <LinearGradient colors={['#8B5A2B', '#6B4423', '#4A2C17']} style={styles.container}>
       {/* Header */}
       <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={handleLeaveRoom} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
+        <TouchableOpacity onPress={handleLeaveRoom} style={styles.leaveButton}>
+          <Ionicons name="arrow-back" size={18} color="#4A2C17" />
+          <Text style={styles.leaveButtonText}>Leave</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Waiting Room</Text>
-        <View style={{ width: 44 }} />
+        
+        <Text style={styles.headerTitle}>UNO! Game</Text>
+        
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.inviteButton} onPress={handleInvite}>
+            <Ionicons name="link" size={16} color="#4A2C17" />
+            <Text style={styles.inviteButtonText}>Invite</Text>
+          </TouchableOpacity>
+          {isCreator && (
+            <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteRoom}>
+              <Ionicons name="trash" size={18} color="#fff" />
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
-      <View style={styles.divider} />
-
       <ScrollView style={styles.content} contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}>
-        {/* Room Code Card */}
-        <View style={styles.codeCard}>
-          <Text style={styles.codeLabel}>ROOM CODE</Text>
-          <View style={styles.codeContainer}>
-            <Text style={styles.codeText}>{roomCode}</Text>
-            <TouchableOpacity style={styles.copyButton} onPress={handleCopyCode}>
-              <Ionicons name={copied ? "checkmark" : "copy-outline"} size={24} color="#8B4513" />
-            </TouchableOpacity>
+        {/* Waiting Title */}
+        <Text style={styles.waitingTitle}>Waiting for Players...</Text>
+        
+        {/* Progress Dots */}
+        <View style={styles.progressContainer}>
+          <View style={styles.progressDots}>
+            {Array.from({ length: maxPlayers }).map((_, index) => (
+              <View 
+                key={index} 
+                style={[
+                  styles.progressDot, 
+                  index < playerCount && styles.progressDotFilled
+                ]} 
+              />
+            ))}
           </View>
+          <Text style={styles.progressText}>{playerCount}/{maxPlayers}</Text>
         </View>
 
-        {/* Share Link Card */}
-        <View style={styles.shareCard}>
-          <Text style={styles.shareLinkLabel}>INVITATION LINK</Text>
-          <View style={styles.linkContainer}>
-            <Text style={styles.linkText} numberOfLines={1}>{inviteLink}</Text>
-          </View>
-          <View style={styles.shareButtons}>
-            <TouchableOpacity style={styles.copyLinkButton} onPress={handleCopyLink}>
-              <Ionicons name="copy-outline" size={20} color="#fff" />
-              <Text style={styles.copyLinkText}>Copy Link</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-              <Ionicons name="share-social" size={20} color="#fff" />
-              <Text style={styles.shareButtonText}>Share</Text>
-            </TouchableOpacity>
-          </View>
+        {/* Room Code Card */}
+        <View style={styles.codeCard}>
+          <Text style={styles.codeLabel}>ROOM ACCESS CODE</Text>
+          <Text style={styles.codeText}>{roomCode}</Text>
+          
+          <TouchableOpacity style={styles.copyCodeButton} onPress={handleCopyCode}>
+            <Ionicons name={copied === 'code' ? "checkmark" : "copy-outline"} size={18} color="#4A2C17" />
+            <Text style={styles.copyCodeText}>{copied === 'code' ? 'Copied!' : 'Copy Code'}</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.copyLinkButton} onPress={handleCopyLink}>
+            <Ionicons name={copied === 'link' ? "checkmark" : "link"} size={18} color="#D4873F" />
+            <Text style={styles.copyLinkText}>{copied === 'link' ? 'Copied!' : 'Copy Link'}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Share Message */}
+        <View style={styles.shareMessageCard}>
+          <Text style={styles.shareMessageText}>
+            <Text style={styles.sparkle}>✨</Text> Share this code with{' '}
+            <Text style={styles.highlightText}>{spotsLeft}</Text> friends to join
+          </Text>
         </View>
 
         {/* Players List */}
         <View style={styles.playersCard}>
           <View style={styles.playersHeader}>
-            <Text style={styles.playersTitle}>Players</Text>
-            <Text style={styles.playersCount}>{room?.players.length || 0}/{room?.max_players || 4}</Text>
+            <View style={styles.onlineIndicator} />
+            <Text style={styles.playersTitle}>Players in Lobby:</Text>
           </View>
-
+          
           {room?.players.map((player, index) => (
             <View key={player.user_id} style={styles.playerItem}>
-              <View style={styles.playerAvatar}>
-                <Ionicons name="person" size={24} color="#FFD700" />
+              <View style={styles.playerNumber}>
+                <Text style={styles.playerNumberText}>{index + 1}</Text>
               </View>
-              <View style={styles.playerInfo}>
-                <Text style={styles.playerName}>
-                  {player.name}
-                  {player.user_id === user?.user_id && ' (You)'}
-                </Text>
-                {player.is_creator && (
-                  <View style={styles.hostBadge}>
-                    <Ionicons name="star" size={12} color="#FFD700" />
-                    <Text style={styles.hostBadgeText}>Host</Text>
-                  </View>
-                )}
-              </View>
-              <View style={[styles.readyIndicator, { backgroundColor: '#4CAF50' }]}>
-                <Ionicons name="checkmark" size={16} color="#fff" />
-              </View>
-            </View>
-          ))}
-
-          {/* Empty slots */}
-          {Array.from({ length: (room?.max_players || 4) - (room?.players.length || 0) }).map((_, index) => (
-            <View key={`empty-${index}`} style={[styles.playerItem, styles.emptySlot]}>
-              <View style={[styles.playerAvatar, styles.emptyAvatar]}>
-                <Ionicons name="person-add-outline" size={24} color="#ccc" />
-              </View>
-              <Text style={styles.emptyText}>Waiting for player...</Text>
+              <Text style={styles.playerName}>
+                {player.name}
+                {player.user_id === user?.user_id && ' (You)'}
+              </Text>
+              {player.is_creator && (
+                <View style={styles.creatorBadge}>
+                  <Text style={styles.creatorBadgeText}>Creator</Text>
+                </View>
+              )}
             </View>
           ))}
         </View>
 
-        {/* Waiting indicator */}
-        {!isCreator && (
-          <View style={styles.waitingIndicator}>
-            <ActivityIndicator size="small" color="#8B4513" />
-            <Text style={styles.waitingText}>Waiting for host to start the game...</Text>
+        {/* Start Game Section (Only for creator) */}
+        {isCreator && (
+          <View style={styles.startGameCard}>
+            <View style={styles.startGameMessage}>
+              <Text style={styles.gamepadEmoji}>🎮</Text>
+              <Text style={styles.startGameText}>
+                {playerCount >= 2 
+                  ? 'You can start the game now or wait for more players to join.'
+                  : 'Waiting for at least 1 more player to join...'}
+              </Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={[
+                styles.startButton,
+                playerCount < 2 && styles.startButtonDisabled
+              ]}
+              onPress={handleStartGame}
+              disabled={playerCount < 2 || starting}
+            >
+              {starting ? (
+                <ActivityIndicator size="small" color="#4A2C17" />
+              ) : (
+                <>
+                  <Text style={styles.rocketEmoji}>🚀</Text>
+                  <Text style={styles.startButtonText}>Start Game</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* Start Game Button (Only for creator) */}
-        {isCreator && (
-          <TouchableOpacity
-            style={[
-              styles.startButton,
-              (room?.players.length || 0) < 2 && styles.startButtonDisabled
-            ]}
-            onPress={handleStartGame}
-            disabled={(room?.players.length || 0) < 2}
-          >
-            <Ionicons name="play" size={24} color="#fff" />
-            <Text style={styles.startButtonText}>Start Game</Text>
-          </TouchableOpacity>
-        )}
-
-        {isCreator && (room?.players.length || 0) < 2 && (
-          <Text style={styles.minPlayersText}>Need at least 2 players to start</Text>
+        {/* Waiting message for non-creators */}
+        {!isCreator && (
+          <View style={styles.waitingMessageCard}>
+            <ActivityIndicator size="small" color="#FFD700" />
+            <Text style={styles.waitingMessageText}>
+              Waiting for the host to start the game...
+            </Text>
+          </View>
         )}
       </ScrollView>
-    </View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F5F5' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F5F5' },
-  loadingText: { marginTop: 15, fontSize: 16, color: '#666' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 15, paddingBottom: 15, backgroundColor: '#C4A574' },
-  backButton: { padding: 10 },
-  headerTitle: { fontSize: 22, fontWeight: 'bold', color: '#fff' },
-  divider: { height: 4, backgroundColor: '#8B4513' },
-  content: { flex: 1, padding: 16 },
-  codeCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 16, alignItems: 'center', elevation: 4, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8 },
-  codeLabel: { fontSize: 14, color: '#888', fontWeight: '600', marginBottom: 10 },
-  codeContainer: { flexDirection: 'row', alignItems: 'center' },
-  codeText: { fontSize: 48, fontWeight: 'bold', color: '#8B4513', letterSpacing: 10 },
-  copyButton: { marginLeft: 15, padding: 10, backgroundColor: '#f0f0f0', borderRadius: 10 },
-  shareCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 16, elevation: 4 },
-  shareLinkLabel: { fontSize: 14, color: '#888', fontWeight: '600', marginBottom: 10 },
-  linkContainer: { backgroundColor: '#f5f5f5', borderRadius: 10, padding: 12, marginBottom: 15 },
-  linkText: { fontSize: 14, color: '#666' },
-  shareButtons: { flexDirection: 'row', gap: 10 },
-  copyLinkButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#8B4513', paddingVertical: 12, borderRadius: 10, gap: 8 },
-  copyLinkText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  shareButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#3498DB', paddingVertical: 12, borderRadius: 10, gap: 8 },
-  shareButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
-  playersCard: { backgroundColor: '#fff', borderRadius: 16, padding: 20, marginBottom: 16, elevation: 4 },
-  playersHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
-  playersTitle: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  playersCount: { fontSize: 16, color: '#8B4513', fontWeight: '600' },
-  playerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
-  playerAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: '#8B4513', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  playerInfo: { flex: 1 },
-  playerName: { fontSize: 16, fontWeight: '600', color: '#333' },
-  hostBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#8B4513', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, alignSelf: 'flex-start', marginTop: 4, gap: 4 },
-  hostBadgeText: { fontSize: 11, color: '#FFD700', fontWeight: '600' },
-  readyIndicator: { width: 28, height: 28, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
-  emptySlot: { opacity: 0.5 },
-  emptyAvatar: { backgroundColor: '#e0e0e0' },
-  emptyText: { color: '#999', fontStyle: 'italic' },
-  waitingIndicator: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 15, gap: 10 },
-  waitingText: { color: '#666', fontSize: 14 },
-  startButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4CAF50', paddingVertical: 16, borderRadius: 12, gap: 10, marginTop: 10 },
-  startButtonDisabled: { backgroundColor: '#ccc' },
-  startButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  minPlayersText: { textAlign: 'center', color: '#888', marginTop: 10, fontSize: 14 },
+  container: { flex: 1 },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 15, fontSize: 16, color: '#F5DEB3' },
+  
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 15, 
+    paddingBottom: 15 
+  },
+  leaveButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#FFD700', 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 20,
+    gap: 4
+  },
+  leaveButtonText: { color: '#4A2C17', fontWeight: '600', fontSize: 14 },
+  headerTitle: { 
+    fontSize: 22, 
+    fontWeight: 'bold', 
+    color: '#F5DEB3',
+    fontStyle: 'italic'
+  },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  inviteButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#FFD700', 
+    paddingHorizontal: 12, 
+    paddingVertical: 8, 
+    borderRadius: 20,
+    gap: 4
+  },
+  inviteButtonText: { color: '#4A2C17', fontWeight: '600', fontSize: 14 },
+  deleteButton: { 
+    backgroundColor: '#DC3545', 
+    padding: 10, 
+    borderRadius: 8 
+  },
+  
+  content: { flex: 1, paddingHorizontal: 20 },
+  
+  waitingTitle: { 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    color: '#F5DEB3', 
+    textAlign: 'center',
+    marginTop: 20,
+    marginBottom: 15,
+    fontStyle: 'italic'
+  },
+  
+  progressContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    backgroundColor: 'rgba(139, 90, 43, 0.8)',
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 25,
+    marginBottom: 20
+  },
+  progressDots: { flexDirection: 'row', gap: 8, marginRight: 15 },
+  progressDot: { 
+    width: 14, 
+    height: 14, 
+    borderRadius: 7, 
+    backgroundColor: 'rgba(255, 255, 255, 0.3)' 
+  },
+  progressDotFilled: { backgroundColor: '#FFD700' },
+  progressText: { 
+    color: '#F5DEB3', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+  
+  codeCard: { 
+    backgroundColor: 'rgba(180, 120, 60, 0.9)', 
+    borderRadius: 16, 
+    padding: 20, 
+    alignItems: 'center',
+    marginBottom: 15,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 215, 0, 0.3)'
+  },
+  codeLabel: { 
+    color: '#F5DEB3', 
+    fontSize: 14, 
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginBottom: 10 
+  },
+  codeText: { 
+    fontSize: 56, 
+    fontWeight: 'bold', 
+    color: '#FFD700', 
+    letterSpacing: 15,
+    marginBottom: 15
+  },
+  copyCodeButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: '#FFD700', 
+    paddingVertical: 12, 
+    paddingHorizontal: 40,
+    borderRadius: 25,
+    marginBottom: 10,
+    gap: 8,
+    width: '100%',
+    justifyContent: 'center'
+  },
+  copyCodeText: { color: '#4A2C17', fontWeight: 'bold', fontSize: 16 },
+  copyLinkButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'transparent', 
+    paddingVertical: 12, 
+    paddingHorizontal: 40,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: '#D4873F',
+    gap: 8,
+    width: '100%',
+    justifyContent: 'center'
+  },
+  copyLinkText: { color: '#D4873F', fontWeight: 'bold', fontSize: 16 },
+  
+  shareMessageCard: {
+    backgroundColor: 'rgba(139, 90, 43, 0.6)',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    alignItems: 'center'
+  },
+  shareMessageText: { color: '#F5DEB3', fontSize: 15, textAlign: 'center' },
+  sparkle: { fontSize: 16 },
+  highlightText: { color: '#FFD700', fontWeight: 'bold', fontSize: 18 },
+  
+  playersCard: { 
+    backgroundColor: 'rgba(139, 90, 43, 0.6)', 
+    borderRadius: 16, 
+    padding: 20,
+    marginBottom: 15
+  },
+  playersHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginBottom: 15 
+  },
+  onlineIndicator: { 
+    width: 10, 
+    height: 10, 
+    borderRadius: 5, 
+    backgroundColor: '#4CAF50',
+    marginRight: 10
+  },
+  playersTitle: { 
+    fontSize: 18, 
+    fontWeight: 'bold', 
+    color: '#F5DEB3',
+    fontStyle: 'italic'
+  },
+  playerItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    backgroundColor: 'rgba(180, 120, 60, 0.8)',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8
+  },
+  playerNumber: { 
+    width: 32, 
+    height: 32, 
+    borderRadius: 16, 
+    backgroundColor: '#FFD700', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    marginRight: 12
+  },
+  playerNumberText: { color: '#4A2C17', fontWeight: 'bold', fontSize: 16 },
+  playerName: { flex: 1, color: '#F5DEB3', fontSize: 16, fontWeight: '600' },
+  creatorBadge: { 
+    backgroundColor: '#FFD700', 
+    paddingHorizontal: 12, 
+    paddingVertical: 4, 
+    borderRadius: 12 
+  },
+  creatorBadgeText: { 
+    color: '#4A2C17', 
+    fontSize: 12, 
+    fontWeight: 'bold',
+    fontStyle: 'italic'
+  },
+  
+  startGameCard: {
+    backgroundColor: 'rgba(139, 90, 43, 0.6)',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 15
+  },
+  startGameMessage: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 15
+  },
+  gamepadEmoji: { fontSize: 24, marginRight: 10, marginTop: 2 },
+  startGameText: { 
+    flex: 1,
+    color: '#F5DEB3', 
+    fontSize: 16, 
+    lineHeight: 24 
+  },
+  startButton: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    backgroundColor: '#FFD700', 
+    paddingVertical: 16, 
+    borderRadius: 25,
+    gap: 10
+  },
+  startButtonDisabled: { 
+    backgroundColor: 'rgba(255, 215, 0, 0.4)' 
+  },
+  rocketEmoji: { fontSize: 20 },
+  startButtonText: { 
+    color: '#4A2C17', 
+    fontSize: 18, 
+    fontWeight: 'bold' 
+  },
+  
+  waitingMessageCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(139, 90, 43, 0.6)',
+    borderRadius: 16,
+    padding: 20,
+    gap: 12
+  },
+  waitingMessageText: { color: '#F5DEB3', fontSize: 14 },
 });
