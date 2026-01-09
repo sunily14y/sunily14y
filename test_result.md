@@ -138,11 +138,14 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "GET /api/leaderboard returns top players with wins, total_games, win_rate"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: GET /api/leaderboard working perfectly. Returns properly sorted leaderboard by wins (descending), then by win_rate. Win rate calculations are accurate (wins/total_games * 100). Found 6 players in leaderboard with correct data structure: player_name, wins, total_games, win_rate. Handles empty state correctly."
 
   - task: "Get player stats"
     implemented: true
