@@ -230,7 +230,10 @@ export default function GameModeScreen() {
               <View style={styles.menuAvatar}>
                 <Ionicons name="person" size={24} color="#FFD700" />
               </View>
-              <Text style={styles.menuPlayerName}>{user?.name || 'Player'}</Text>
+              <View>
+                <Text style={styles.menuPlayerName}>{user?.name || 'Player'}</Text>
+                {isGuest && <Text style={styles.guestBadge}>Guest Mode</Text>}
+              </View>
             </View>
             
             <TouchableOpacity style={styles.menuItem} onPress={() => navigateTo('/game-mode')}>
