@@ -6,18 +6,22 @@ import {
   TouchableOpacity,
   Dimensions,
   Animated,
+  ScrollView,
+  Platform,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width, height } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [playerName, setPlayerName] = useState<string | null>(null);
-  const fadeAnim = new Animated.Value(0);
-  const scaleAnim = new Animated.Value(0.8);
+  const fadeAnim = React.useRef(new Animated.Value(0)).current;
+  const scaleAnim = React.useRef(new Animated.Value(0.8)).current;
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadPlayerName();
@@ -37,8 +41,12 @@ export default function HomeScreen() {
   }, []);
 
   const loadPlayerName = async () => {
-    const name = await AsyncStorage.getItem('playerName');
-    setPlayerName(name);
+    try {
+      const name = await AsyncStorage.getItem('playerName');
+      setPlayerName(name);
+    } catch (error) {
+      console.log('Error loading player name:', error);
+    }
   };
 
   const handlePlayNow = () => {
@@ -54,88 +62,97 @@ export default function HomeScreen() {
       colors={['#8B4513', '#5D2E0C', '#3D1E08', '#1a0f00']}
       style={styles.container}
     >
-      <Animated.View
-        style={[
-          styles.content,
-          {
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }],
-          },
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 20 }
         ]}
+        showsVerticalScrollIndicator={false}
       >
-        {/* Logo Section */}
-        <View style={styles.logoContainer}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>U</Text>
+        <Animated.View
+          style={[
+            styles.content,
+            {
+              opacity: fadeAnim,
+              transform: [{ scale: scaleAnim }],
+            },
+          ]}
+        >
+          {/* Logo Section */}
+          <View style={styles.logoContainer}>
+            <View style={styles.logoCircle}>
+              <Text style={styles.logoText}>U</Text>
+            </View>
+            <Text style={styles.titleText}>UNO!</Text>
           </View>
-          <Text style={styles.titleText}>UNO!</Text>
-        </View>
 
-        {/* Tagline */}
-        <View style={styles.taglineContainer}>
-          <View style={styles.taglineBadge}>
-            <Ionicons name="game-controller" size={16} color="#FFD700" />
-            <Text style={styles.taglineText}>Play the Classic Card Game</Text>
+          {/* Tagline */}
+          <View style={styles.taglineContainer}>
+            <View style={styles.taglineBadge}>
+              <Ionicons name="game-controller" size={16} color="#FFD700" />
+              <Text style={styles.taglineText}>Play the Classic Card Game</Text>
+            </View>
           </View>
-        </View>
 
-        {/* Main Heading */}
-        <Text style={styles.mainHeading}>Experience UNO</Text>
-        <Text style={styles.mainHeadingAccent}>Like Never Before</Text>
+          {/* Main Heading */}
+          <Text style={styles.mainHeading}>Experience UNO</Text>
+          <Text style={styles.mainHeadingAccent}>Like Never Before</Text>
 
-        {/* Description */}
-        <Text style={styles.description}>
-          Challenge AI opponents or play with friends. Fast-paced matches with
-          all the classic UNO rules you love.
-        </Text>
+          {/* Description */}
+          <Text style={styles.description}>
+            Challenge AI opponents or play with friends. Fast-paced matches with
+            all the classic UNO rules you love.
+          </Text>
 
-        {/* Buttons */}
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.playButton} onPress={handlePlayNow}>
-            <Ionicons name="play" size={20} color="#fff" />
-            <Text style={styles.playButtonText}>Play Now</Text>
-          </TouchableOpacity>
+          {/* Buttons */}
+          <View style={styles.buttonContainer}>
+            <TouchableOpacity style={styles.playButton} onPress={handlePlayNow}>
+              <Ionicons name="play" size={20} color="#fff" />
+              <Text style={styles.playButtonText}>Play Now</Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.leaderboardButton}
-            onPress={() => router.push('/leaderboard')}
-          >
-            <Text style={styles.leaderboardButtonText}>Leaderboard</Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={styles.leaderboardButton}
+              onPress={() => router.push('/leaderboard')}
+            >
+              <Text style={styles.leaderboardButtonText}>Leaderboard</Text>
+            </TouchableOpacity>
+          </View>
 
-        {/* Stats Row */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statItem}>
-            <Ionicons name="people" size={18} color="#B8860B" />
-            <Text style={styles.statText}>vs AI</Text>
+          {/* Stats Row */}
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Ionicons name="people" size={18} color="#B8860B" />
+              <Text style={styles.statText}>vs AI</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="flash" size={18} color="#B8860B" />
+              <Text style={styles.statText}>Fast Gameplay</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Ionicons name="shield-checkmark" size={18} color="#B8860B" />
+              <Text style={styles.statText}>Classic Rules</Text>
+            </View>
           </View>
-          <View style={styles.statItem}>
-            <Ionicons name="flash" size={18} color="#B8860B" />
-            <Text style={styles.statText}>Fast Gameplay</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Ionicons name="shield-checkmark" size={18} color="#B8860B" />
-            <Text style={styles.statText}>Classic Rules</Text>
-          </View>
-        </View>
 
-        {/* Features */}
-        <View style={styles.featuresContainer}>
-          <View style={styles.featureItem}>
-            <Ionicons name="dice" size={24} color="#FFD700" />
-            <Text style={styles.featureText}>Smart AI</Text>
+          {/* Features */}
+          <View style={styles.featuresContainer}>
+            <View style={styles.featureItem}>
+              <Ionicons name="dice" size={24} color="#FFD700" />
+              <Text style={styles.featureText}>Smart AI</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="trophy" size={24} color="#FFD700" />
+              <Text style={styles.featureText}>Leaderboards</Text>
+            </View>
+            <View style={styles.featureItem}>
+              <Ionicons name="color-palette" size={24} color="#FFD700" />
+              <Text style={styles.featureText}>Classic Cards</Text>
+            </View>
           </View>
-          <View style={styles.featureItem}>
-            <Ionicons name="trophy" size={24} color="#FFD700" />
-            <Text style={styles.featureText}>Leaderboards</Text>
-          </View>
-          <View style={styles.featureItem}>
-            <Ionicons name="color-palette" size={24} color="#FFD700" />
-            <Text style={styles.featureText}>Classic Cards</Text>
-          </View>
-        </View>
-      </Animated.View>
+        </Animated.View>
+      </ScrollView>
     </LinearGradient>
   );
 }
@@ -144,11 +161,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  content: {
+  scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    minHeight: '100%',
+  },
+  content: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
+    width: '100%',
   },
   logoContainer: {
     flexDirection: 'row',
@@ -194,13 +220,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   mainHeading: {
-    fontSize: 38,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#F5DEB3',
     textAlign: 'center',
   },
   mainHeadingAccent: {
-    fontSize: 38,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#F5DEB3',
     fontStyle: 'italic',
@@ -213,11 +239,15 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     maxWidth: 500,
     lineHeight: 20,
+    paddingHorizontal: 10,
   },
   buttonContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 10,
   },
   playButton: {
     flexDirection: 'row',
@@ -226,7 +256,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 8,
-    marginRight: 15,
   },
   playButtonText: {
     color: '#fff',
@@ -248,11 +277,14 @@ const styles = StyleSheet.create({
   statsContainer: {
     flexDirection: 'row',
     marginBottom: 20,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: 15,
+    marginHorizontal: 10,
+    marginVertical: 5,
   },
   statText: {
     color: '#D2B48C',
@@ -261,10 +293,13 @@ const styles = StyleSheet.create({
   },
   featuresContainer: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   featureItem: {
     alignItems: 'center',
-    marginHorizontal: 20,
+    marginHorizontal: 15,
+    marginVertical: 5,
   },
   featureText: {
     color: '#F5DEB3',
