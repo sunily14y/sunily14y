@@ -12,6 +12,7 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
 
@@ -29,6 +30,7 @@ export default function GameModeScreen() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   const [showDifficultyModal, setShowDifficultyModal] = useState(false);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadPlayerData();
@@ -92,7 +94,7 @@ export default function GameModeScreen() {
   return (
     <View style={styles.container}>
       {/* Header */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
         <View style={styles.headerLeft}>
           <View style={styles.logoCircle}>
             <Text style={styles.logoText}>U</Text>
@@ -113,96 +115,96 @@ export default function GameModeScreen() {
       {/* Content */}
       <ScrollView 
         style={styles.content}
-        contentContainerStyle={styles.contentContainer}
+        contentContainerStyle={[styles.contentContainer, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.cardsGrid}>
-          {/* Your Stats Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="trophy-outline" size={24} color="#D4A574" />
-              <Text style={styles.cardTitle}>Your Stats</Text>
-            </View>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{stats?.total_games || 0}</Text>
-                <Text style={styles.statLabel}>PLAYED</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={styles.statNumber}>{stats?.wins || 0}</Text>
-                <Text style={styles.statLabel}>WINS</Text>
-              </View>
-              <View style={styles.statItem}>
-                <Text style={[styles.statNumber, styles.rateNumber]}>
-                  {stats?.win_rate?.toFixed(0) || 0}%
-                </Text>
-                <Text style={styles.statLabel}>RATE</Text>
-              </View>
-            </View>
+        {/* Your Stats Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="trophy-outline" size={24} color="#D4A574" />
+            <Text style={styles.cardTitle}>Your Stats</Text>
           </View>
-
-          {/* Create Room Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="add" size={24} color="#9B59B6" />
-              <Text style={styles.cardTitle}>Create Room</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{stats?.total_games || 0}</Text>
+              <Text style={styles.statLabel}>PLAYED</Text>
             </View>
-            <Text style={styles.cardSubtitle}>Start a private game</Text>
-            <TouchableOpacity 
-              style={styles.createRoomButton}
-              onPress={handleCreateRoom}
-            >
-              <Ionicons name="add" size={20} color="#fff" />
-              <Text style={styles.createRoomButtonText}>Create Room</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Join by Code Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Ionicons name="enter-outline" size={24} color="#3498DB" />
-              <Text style={styles.cardTitle}>Join by Code</Text>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>{stats?.wins || 0}</Text>
+              <Text style={styles.statLabel}>WINS</Text>
             </View>
-            <Text style={styles.cardSubtitle}>Enter a friend's code</Text>
-            <TouchableOpacity 
-              style={styles.joinGameButton}
-              onPress={() => setShowJoinModal(true)}
-            >
-              <Ionicons name="enter-outline" size={20} color="#fff" />
-              <Text style={styles.joinGameButtonText}>Join Game</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Practice Mode Card */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.robotEmoji}>🤖</Text>
-              <Text style={styles.cardTitle}>Practice Mode</Text>
+            <View style={styles.statItem}>
+              <Text style={[styles.statNumber, styles.rateNumber]}>
+                {stats?.win_rate?.toFixed(0) || 0}%
+              </Text>
+              <Text style={styles.statLabel}>RATE</Text>
             </View>
-            <Text style={styles.cardSubtitle}>Play against AI</Text>
-            <TouchableOpacity 
-              style={styles.practiceButton}
-              onPress={handleStartPractice}
-            >
-              <Text style={styles.robotEmoji}>🤖</Text>
-              <Text style={styles.practiceButtonText}>Start Practice</Text>
-            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Local Multiplayer Option */}
+        {/* Create Room Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="add" size={24} color="#9B59B6" />
+            <Text style={styles.cardTitle}>Create Room</Text>
+          </View>
+          <Text style={styles.cardSubtitle}>Start a private game</Text>
+          <TouchableOpacity 
+            style={styles.createRoomButton}
+            onPress={handleCreateRoom}
+          >
+            <Ionicons name="add" size={20} color="#fff" />
+            <Text style={styles.buttonText}>Create Room</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Join by Code Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Ionicons name="enter-outline" size={24} color="#3498DB" />
+            <Text style={styles.cardTitle}>Join by Code</Text>
+          </View>
+          <Text style={styles.cardSubtitle}>Enter a friend's code</Text>
+          <TouchableOpacity 
+            style={styles.joinGameButton}
+            onPress={() => setShowJoinModal(true)}
+          >
+            <Ionicons name="enter-outline" size={20} color="#fff" />
+            <Text style={styles.buttonText}>Join Game</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Practice Mode Card */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.robotEmoji}>🤖</Text>
+            <Text style={styles.cardTitle}>Practice Mode</Text>
+          </View>
+          <Text style={styles.cardSubtitle}>Play against AI</Text>
+          <TouchableOpacity 
+            style={styles.practiceButton}
+            onPress={handleStartPractice}
+          >
+            <Text style={styles.robotEmoji}>🤖</Text>
+            <Text style={styles.buttonText}>Start Practice</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Local Multiplayer Card */}
         <TouchableOpacity 
-          style={styles.localMultiplayerCard}
+          style={styles.card}
           onPress={() => router.push({ pathname: '/game', params: { difficulty: 'local' } })}
         >
           <View style={styles.localMultiplayerContent}>
-            <Ionicons name="people" size={28} color="#E74C3C" />
-            <View style={styles.localMultiplayerText}>
-              <Text style={styles.localMultiplayerTitle}>Local 2 Players</Text>
-              <Text style={styles.localMultiplayerSubtitle}>Pass & play with a friend on this device</Text>
+            <View style={styles.cardHeader}>
+              <Ionicons name="people" size={24} color="#E74C3C" />
+              <Text style={styles.cardTitle}>Local 2 Players</Text>
+            </View>
+            <View style={styles.localMultiplayerRow}>
+              <Text style={styles.cardSubtitle}>Pass & play with a friend on this device</Text>
+              <Ionicons name="chevron-forward" size={24} color="#999" />
             </View>
           </View>
-          <Ionicons name="chevron-forward" size={24} color="#999" />
         </TouchableOpacity>
       </ScrollView>
 
@@ -218,7 +220,7 @@ export default function GameModeScreen() {
           activeOpacity={1}
           onPress={() => setShowMenu(false)}
         >
-          <View style={styles.menuModal}>
+          <View style={[styles.menuModal, { top: insets.top + 70 }]}>
             <View style={styles.menuHeader}>
               <View style={styles.menuAvatar}>
                 <Ionicons name="person" size={24} color="#FFD700" />
@@ -350,7 +352,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 15,
     paddingBottom: 15,
     backgroundColor: '#C4A574',
   },
@@ -394,19 +395,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
-    padding: 20,
-  },
-  cardsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    padding: 16,
   },
   card: {
-    width: '48%',
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 16,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -422,7 +417,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginLeft: 8,
+    marginLeft: 10,
   },
   cardSubtitle: {
     fontSize: 14,
@@ -432,13 +427,13 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    marginTop: 10,
+    marginTop: 5,
   },
   statItem: {
     alignItems: 'center',
   },
   statNumber: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: 'bold',
     color: '#D4A574',
   },
@@ -462,12 +457,6 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
   },
-  createRoomButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
   joinGameButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -475,12 +464,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#3498DB',
     paddingVertical: 14,
     borderRadius: 12,
-  },
-  joinGameButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginLeft: 8,
   },
   practiceButton: {
     flexDirection: 'row',
@@ -490,42 +473,19 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderRadius: 12,
   },
-  practiceButtonText: {
+  buttonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
   },
-  localMultiplayerCard: {
+  localMultiplayerContent: {
+    width: '100%',
+  },
+  localMultiplayerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 20,
-    marginTop: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  localMultiplayerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  localMultiplayerText: {
-    marginLeft: 15,
-  },
-  localMultiplayerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  localMultiplayerSubtitle: {
-    fontSize: 14,
-    color: '#888',
-    marginTop: 2,
   },
   modalOverlay: {
     flex: 1,
@@ -535,7 +495,6 @@ const styles = StyleSheet.create({
   },
   menuModal: {
     position: 'absolute',
-    top: 70,
     right: 20,
     backgroundColor: '#fff',
     borderRadius: 16,
@@ -590,7 +549,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 25,
-    width: '80%',
+    width: '85%',
     maxWidth: 350,
     alignItems: 'center',
   },
@@ -615,6 +574,7 @@ const styles = StyleSheet.create({
   joinModalButtons: {
     flexDirection: 'row',
     gap: 12,
+    width: '100%',
   },
   cancelButton: {
     flex: 1,
@@ -644,7 +604,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 20,
     padding: 25,
-    width: '80%',
+    width: '85%',
     maxWidth: 350,
     alignItems: 'center',
   },
