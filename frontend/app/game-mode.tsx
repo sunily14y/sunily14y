@@ -31,6 +31,9 @@ export default function GameModeScreen() {
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [roomCode, setRoomCode] = useState('');
   const [showDifficultyModal, setShowDifficultyModal] = useState(false);
+  const [showCreateRoomModal, setShowCreateRoomModal] = useState(false);
+  const [creatingRoom, setCreatingRoom] = useState(false);
+  const [joiningRoom, setJoiningRoom] = useState(false);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -62,25 +65,78 @@ export default function GameModeScreen() {
   };
 
   const handleCreateRoom = () => {
-    Alert.alert(
-      'Coming Soon',
-      'Online multiplayer with room codes is coming soon! For now, try Practice Mode to play against AI.',
-      [{ text: 'OK' }]
-    );
+    setShowCreateRoomModal(true);
   };
 
-  const handleJoinGame = () => {
-    if (roomCode.trim().length < 4) {
-      Alert.alert('Invalid Code', 'Please enter a valid room code');
+  const handleConfirmCreateRoom = async () => {
+    if (!user) return;
+    
+    setCreatingRoom(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/rooms/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: user.user_id,
+          user_name: user.name,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setShowCreateRoomModal(false);
+        router.push({
+          pathname: '/waiting-room',
+          params: { roomCode: data.room_code },
+        });
+      } else {
+        Alert.alert('Error', data.detail || 'Failed to create room');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create room');
+    } finally {
+      setCreatingRoom(false);
+    }
+  };
+
+  const handleJoinGame = async () => {
+    if (roomCode.trim().length !== 4) {
+      Alert.alert('Invalid Code', 'Please enter a 4-digit room code');
       return;
     }
-    Alert.alert(
-      'Coming Soon',
-      'Online multiplayer with room codes is coming soon!',
-      [{ text: 'OK' }]
-    );
-    setShowJoinModal(false);
-    setRoomCode('');
+
+    if (!user) return;
+
+    setJoiningRoom(true);
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/rooms/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          room_code: roomCode.trim(),
+          user_id: user.user_id,
+          user_name: user.name,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setShowJoinModal(false);
+        setRoomCode('');
+        router.push({
+          pathname: '/waiting-room',
+          params: { roomCode: roomCode.trim() },
+        });
+      } else {
+        Alert.alert('Cannot Join', data.detail || 'Failed to join room');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to join room');
+    } finally {
+      setJoiningRoom(false);
+    }
   };
 
   const handleStartPractice = () => {
