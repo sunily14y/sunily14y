@@ -36,10 +36,10 @@ export default function GameModeScreen() {
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
       router.replace('/');
-    } else if (isAuthenticated) {
+    } else if (isAuthenticated && !isGuest) {
       loadPlayerStats();
     }
-  }, [isAuthenticated, isLoading]);
+  }, [isAuthenticated, isLoading, isGuest]);
 
   const loadPlayerStats = async () => {
     try {
