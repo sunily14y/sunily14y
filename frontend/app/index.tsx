@@ -102,9 +102,15 @@ export default function HomeScreen() {
               <Text style={styles.appleButtonText}>Continue with Apple</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.facebookButton} onPress={handleSignIn}>
-              <Ionicons name="logo-facebook" size={22} color="#fff" />
-              <Text style={styles.facebookButtonText}>Continue with Facebook</Text>
+            <View style={styles.dividerContainer}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity style={styles.guestButton} onPress={handlePlayAsGuest}>
+              <Ionicons name="person-outline" size={22} color="#8B4513" />
+              <Text style={styles.guestButtonText}>Play as Guest</Text>
             </TouchableOpacity>
           </View>
 
