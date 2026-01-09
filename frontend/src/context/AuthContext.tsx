@@ -31,6 +31,7 @@ WebBrowser.maybeCompleteAuthSession();
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -84,8 +85,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         await AsyncStorage.setItem('session_token', data.session_token);
+        await AsyncStorage.removeItem('guest_user'); // Clear guest if logging in
         setSessionToken(data.session_token);
         setUser(data.user);
+        setIsGuest(false);
       }
     } catch (error) {
       console.error('Error exchanging session_id:', error);
@@ -97,6 +100,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const checkAuth = async () => {
     try {
       setIsLoading(true);
+      
+      // Check for guest user first
+      const guestUser = await AsyncStorage.getItem('guest_user');
+      if (guestUser) {
+        const guest = JSON.parse(guestUser);
+        setUser(guest);
+        setIsGuest(true);
+        setIsLoading(false);
+        return;
+      }
+      
+      // Check for authenticated user
       const token = await AsyncStorage.getItem('session_token');
       
       if (token) {
@@ -108,6 +123,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const userData = await response.json();
           setUser(userData);
           setSessionToken(token);
+          setIsGuest(false);
         } else {
           await AsyncStorage.removeItem('session_token');
           setUser(null);
@@ -148,8 +164,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const loginAsGuest = async () => {
+    try {
+      setIsLoading(true);
+      
+      // Generate a random guest ID
+      const guestId = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const guestUser: User = {
+        user_id: guestId,
+        email: 'guest@uno.game',
+        name: `Guest_${Math.floor(Math.random() * 10000)}`,
+      };
+      
+      // Store guest user in AsyncStorage
+      await AsyncStorage.setItem('guest_user', JSON.stringify(guestUser));
+      
+      setUser(guestUser);
+      setIsGuest(true);
+    } catch (error) {
+      console.error('Error during guest login:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const logout = async () => {
     try {
+      // Clear guest user
+      await AsyncStorage.removeItem('guest_user');
+      
+      // Clear authenticated session
       const token = await AsyncStorage.getItem('session_token');
       if (token) {
         await fetch(`${BACKEND_URL}/api/auth/logout`, {
@@ -158,8 +202,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       }
       await AsyncStorage.removeItem('session_token');
+      
       setUser(null);
       setSessionToken(null);
+      setIsGuest(false);
     } catch (error) {
       console.error('Error during logout:', error);
     }
@@ -175,7 +221,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isLoading,
         isAuthenticated: !!user,
+        isGuest,
         login,
+        loginAsGuest,
         logout,
         refreshUser,
       }}
