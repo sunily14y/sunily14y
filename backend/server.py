@@ -989,12 +989,22 @@ app.include_router(api_router)
 @api_router.get("/backtest/available-dates")
 async def get_backtest_dates():
     """Get list of available dates for backtesting (last 60 days)"""
-    dates = get_available_dates(60)
+    import asyncio
+    import concurrent.futures
+    
+    # Run the blocking yfinance call in a thread pool
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        dates = await loop.run_in_executor(pool, get_available_dates, 60)
+    
     return {"dates": dates}
 
 @api_router.post("/backtest/start")
 async def start_backtest(session_id: str, date: str, speed: float = 1.0):
     """Start a backtest session for a specific date"""
+    import asyncio
+    import concurrent.futures
+    
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1003,8 +1013,12 @@ async def start_backtest(session_id: str, date: str, speed: float = 1.0):
     config = session.get("config", {})
     engine = create_backtest_engine(session_id, config)
     
-    # Load historical data
-    if not engine.load_data(date):
+    # Load historical data in thread pool (yfinance is blocking)
+    loop = asyncio.get_event_loop()
+    with concurrent.futures.ThreadPoolExecutor() as pool:
+        success = await loop.run_in_executor(pool, engine.load_data, date)
+    
+    if not success:
         remove_backtest_engine(session_id)
         raise HTTPException(status_code=400, detail=f"No data available for {date}")
     
