@@ -54,6 +54,7 @@ kite = KiteConnect(api_key=ZERODHA_API_KEY) if ZERODHA_API_KEY else None
 class TradingMode(str, Enum):
     PAPER = "paper"
     LIVE = "live"
+    BACKTEST = "backtest"
 
 class PositionType(str, Enum):
     CE = "CE"
