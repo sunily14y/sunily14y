@@ -21,6 +21,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { toast } from "sonner";
 import StrategyConfigModal from "../components/StrategyConfigModal";
+import BacktestPanel from "../components/BacktestPanel";
 
 const DashboardPage = () => {
   const {
@@ -430,6 +431,9 @@ const DashboardPage = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Backtest Panel */}
+        <BacktestPanel />
 
         {/* Recent Trades */}
         <Card className="bg-card border-border">
