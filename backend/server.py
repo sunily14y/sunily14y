@@ -984,6 +984,213 @@ async def get_stats(session_id: str):
 # Include router
 app.include_router(api_router)
 
+# ====================== BACKTEST API ROUTES ======================
+
+@api_router.get("/backtest/available-dates")
+async def get_backtest_dates():
+    """Get list of available dates for backtesting (last 60 days)"""
+    dates = get_available_dates(60)
+    return {"dates": dates}
+
+@api_router.post("/backtest/start")
+async def start_backtest(session_id: str, date: str, speed: float = 1.0):
+    """Start a backtest session for a specific date"""
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    # Create backtest engine
+    config = session.get("config", {})
+    engine = create_backtest_engine(session_id, config)
+    
+    # Load historical data
+    if not engine.load_data(date):
+        remove_backtest_engine(session_id)
+        raise HTTPException(status_code=400, detail=f"No data available for {date}")
+    
+    engine.speed = speed
+    engine.is_running = True
+    
+    # Update session mode
+    config["trading_mode"] = "backtest"
+    config["backtest_date"] = date
+    config["backtest_speed"] = speed
+    await db.sessions.update_one(
+        {"id": session_id},
+        {"$set": {"config": config}}
+    )
+    
+    first_candle = engine.get_current_candle()
+    
+    return {
+        "success": True,
+        "date": date,
+        "total_candles": len(engine.data),
+        "first_timestamp": first_candle["timestamp"] if first_candle else None,
+        "speed": speed
+    }
+
+@api_router.post("/backtest/stop")
+async def stop_backtest(session_id: str):
+    """Stop backtest session"""
+    remove_backtest_engine(session_id)
+    
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if session:
+        config = session.get("config", {})
+        config["trading_mode"] = "paper"
+        config.pop("backtest_date", None)
+        config.pop("backtest_speed", None)
+        await db.sessions.update_one(
+            {"id": session_id},
+            {"$set": {"config": config}}
+        )
+    
+    return {"success": True}
+
+@api_router.get("/backtest/state")
+async def get_backtest_state(session_id: str):
+    """Get current backtest state"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        return {"is_active": False}
+    
+    candle = engine.get_current_candle()
+    progress = engine.get_progress()
+    
+    return {
+        "is_active": engine.is_running,
+        "speed": engine.speed,
+        "spot_price": candle["close"] if candle else 0,
+        "timestamp": candle["timestamp"] if candle else None,
+        "progress": progress,
+        "ce_strike": engine.ce_strike,
+        "pe_strike": engine.pe_strike,
+        "adjustment_count": engine.adjustment_count
+    }
+
+@api_router.post("/backtest/advance")
+async def advance_backtest(session_id: str, steps: int = 1):
+    """Advance backtest by N candles"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    for _ in range(steps):
+        if not engine.advance():
+            break
+    
+    candle = engine.get_current_candle()
+    progress = engine.get_progress()
+    
+    # Check for adjustments if strategy is active
+    adjustment_triggered = False
+    if engine.ce_strike and engine.pe_strike and candle:
+        spot = candle["close"]
+        adjustment_zone = engine.config.get("adjustment_zone", 50)
+        
+        if spot >= engine.ce_strike - adjustment_zone:
+            # Shift UP
+            engine.ce_strike += 50
+            engine.pe_strike += 50
+            engine.adjustment_count += 1
+            adjustment_triggered = True
+        elif spot <= engine.pe_strike + adjustment_zone:
+            # Shift DOWN
+            engine.ce_strike -= 50
+            engine.pe_strike -= 50
+            engine.adjustment_count += 1
+            adjustment_triggered = True
+    
+    return {
+        "spot_price": candle["close"] if candle else 0,
+        "timestamp": candle["timestamp"] if candle else None,
+        "progress": progress,
+        "ce_strike": engine.ce_strike,
+        "pe_strike": engine.pe_strike,
+        "adjustment_count": engine.adjustment_count,
+        "adjustment_triggered": adjustment_triggered
+    }
+
+@api_router.get("/backtest/chart-data")
+async def get_backtest_chart(session_id: str, candles: int = 50):
+    """Get chart data for backtest"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    past_data = engine.get_past_data(candles)
+    
+    return {
+        "data": [{"timestamp": c["timestamp"], "price": c["close"]} for c in past_data],
+        "ce_strike": engine.ce_strike,
+        "pe_strike": engine.pe_strike
+    }
+
+@api_router.post("/backtest/start-strategy")
+async def start_backtest_strategy(session_id: str):
+    """Start strategy within backtest"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    spot = engine.get_spot_price()
+    atm = round(spot / 50) * 50
+    strike_distance = engine.config.get("strike_distance", 200)
+    
+    engine.ce_strike = atm + strike_distance
+    engine.pe_strike = atm - strike_distance
+    engine.adjustment_count = 0
+    
+    ce_premium = engine.get_option_premium(engine.ce_strike, "CE")
+    pe_premium = engine.get_option_premium(engine.pe_strike, "PE")
+    
+    return {
+        "success": True,
+        "spot_price": spot,
+        "ce_strike": engine.ce_strike,
+        "pe_strike": engine.pe_strike,
+        "ce_premium": ce_premium,
+        "pe_premium": pe_premium
+    }
+
+@api_router.post("/backtest/stop-strategy")
+async def stop_backtest_strategy(session_id: str):
+    """Stop strategy within backtest"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    spot = engine.get_spot_price()
+    
+    ce_exit = engine.get_option_premium(engine.ce_strike, "CE") if engine.ce_strike else 0
+    pe_exit = engine.get_option_premium(engine.pe_strike, "PE") if engine.pe_strike else 0
+    
+    result = {
+        "success": True,
+        "ce_strike": engine.ce_strike,
+        "pe_strike": engine.pe_strike,
+        "ce_exit_premium": ce_exit,
+        "pe_exit_premium": pe_exit,
+        "adjustment_count": engine.adjustment_count
+    }
+    
+    engine.ce_strike = None
+    engine.pe_strike = None
+    engine.adjustment_count = 0
+    
+    return result
+
+@api_router.get("/backtest/option-premium")
+async def get_backtest_option_premium(session_id: str, strike: int, option_type: str):
+    """Get option premium for a strike in backtest"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    premium = engine.get_option_premium(strike, option_type)
+    return {"strike": strike, "option_type": option_type, "premium": premium}
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
