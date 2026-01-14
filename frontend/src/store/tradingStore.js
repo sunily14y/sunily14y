@@ -137,8 +137,11 @@ export const useTradingStore = create((set, get) => ({
   
   // Market data
   fetchSpotPrice: async () => {
+    const { sessionId } = get();
     try {
-      const response = await axios.get(`${API_URL}/market/spot`);
+      const response = await axios.get(`${API_URL}/market/spot`, {
+        params: { session_id: sessionId }
+      });
       set({ spotPrice: response.data.spot_price });
       return response.data;
     } catch (error) {
@@ -147,9 +150,10 @@ export const useTradingStore = create((set, get) => ({
   },
   
   fetchSpotHistory: async (minutes = 60) => {
+    const { sessionId } = get();
     try {
       const response = await axios.get(`${API_URL}/market/spot-history`, {
-        params: { minutes }
+        params: { minutes, session_id: sessionId }
       });
       set({ spotHistory: response.data.history });
     } catch (error) {
@@ -158,8 +162,11 @@ export const useTradingStore = create((set, get) => ({
   },
   
   fetchOptionsChain: async () => {
+    const { sessionId } = get();
     try {
-      const response = await axios.get(`${API_URL}/market/options-chain`);
+      const response = await axios.get(`${API_URL}/market/options-chain`, {
+        params: { session_id: sessionId }
+      });
       set({
         optionsChain: response.data.chain,
         atmStrike: response.data.atm_strike,
