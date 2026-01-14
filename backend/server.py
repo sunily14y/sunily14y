@@ -502,6 +502,11 @@ async def auth_callback(request_token: str, status: str = None, state: str = Non
             # Real Zerodha authentication
             data = kite.generate_session(request_token, api_secret=ZERODHA_API_SECRET)
             
+            # Get current session to update config
+            session = await db.sessions.find_one({"id": sid}, {"_id": 0})
+            current_config = session.get("config", {}) if session else {}
+            current_config["trading_mode"] = "live"  # Auto-switch to live mode
+            
             await db.sessions.update_one(
                 {"id": sid},
                 {"$set": {
@@ -510,16 +515,17 @@ async def auth_callback(request_token: str, status: str = None, state: str = Non
                     "access_token": data.get("access_token"),
                     "public_token": data.get("public_token"),
                     "login_time": datetime.now(timezone.utc).isoformat(),
+                    "config": current_config
                 }}
             )
             
             # Clean up pending auth
             await db.pending_auth.delete_one({"session_id": sid})
             
-            logger.info(f"Zerodha authentication successful for user {data.get('user_id')}")
+            logger.info(f"Zerodha authentication successful for user {data.get('user_id')} - Live mode enabled")
             
             # Redirect to frontend dashboard with session
-            return RedirectResponse(url=f"https://dynastrangle-algo.preview.emergentagent.com/dashboard?auth=success&session_id={sid}")
+            return RedirectResponse(url=f"https://dynastrangle-algo.preview.emergentagent.com/dashboard?auth=success&session_id={sid}&mode=live")
         else:
             # Mock authentication for paper trading
             await db.sessions.update_one(
