@@ -100,15 +100,31 @@ def get_available_dates(days: int = 60) -> List[str]:
         
         df = ticker.history(start=start, end=end, interval="1d")
         
+        if df.empty:
+            logger.error("No data returned from Yahoo Finance")
+            return []
+        
         dates = []
         for idx in df.index:
-            ts = idx.to_pydatetime()
+            # Handle timezone-aware datetime
+            if hasattr(idx, 'to_pydatetime'):
+                ts = idx.to_pydatetime()
+            else:
+                ts = idx
+            
+            # Remove timezone info for formatting
+            if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+                ts = ts.replace(tzinfo=None)
+            
             dates.append(ts.strftime("%Y-%m-%d"))
         
+        logger.info(f"Found {len(dates)} available dates for backtesting")
         return sorted(dates, reverse=True)  # Most recent first
         
     except Exception as e:
         logger.error(f"Error getting available dates: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
