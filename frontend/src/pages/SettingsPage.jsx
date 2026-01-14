@@ -117,14 +117,14 @@ const SettingsPage = () => {
                 data-testid="lot-size-input"
                 type="number"
                 min={1}
-                max={100}
                 value={localConfig.lot_size}
                 onChange={(e) => handleChange('lot_size', e.target.value)}
                 disabled={isStrategyActive}
                 className="font-mono"
+                placeholder="Enter any lot size"
               />
               <p className="text-xs text-muted-foreground">
-                1 lot = 25 units (NIFTY)
+                1 lot = 25 units (NIFTY). No upper limit.
               </p>
             </div>
 
@@ -135,15 +135,15 @@ const SettingsPage = () => {
                 data-testid="strike-distance-input"
                 type="number"
                 min={50}
-                max={500}
                 step={50}
                 value={localConfig.strike_distance}
                 onChange={(e) => handleChange('strike_distance', e.target.value)}
                 disabled={isStrategyActive}
                 className="font-mono"
+                placeholder="e.g., 100, 200, 300..."
               />
               <p className="text-xs text-muted-foreground">
-                Distance from ATM for initial CE/PE
+                Distance from ATM for initial CE/PE. Min 50 pts.
               </p>
             </div>
 
@@ -154,15 +154,15 @@ const SettingsPage = () => {
                 data-testid="adjustment-zone-input"
                 type="number"
                 min={10}
-                max={200}
                 step={10}
                 value={localConfig.adjustment_zone}
                 onChange={(e) => handleChange('adjustment_zone', e.target.value)}
                 disabled={isStrategyActive}
                 className="font-mono"
+                placeholder="e.g., 30, 50, 100..."
               />
               <p className="text-xs text-muted-foreground">
-                Trigger adjustment when spot approaches strike
+                Trigger adjustment when spot approaches strike. Min 10 pts.
               </p>
             </div>
           </div>
@@ -189,13 +189,13 @@ const SettingsPage = () => {
                 data-testid="max-daily-loss-input"
                 type="number"
                 min={0}
-                placeholder="Optional"
+                placeholder="Enter any amount (optional)"
                 value={localConfig.max_daily_loss}
                 onChange={(e) => handleChange('max_daily_loss', e.target.value)}
                 className="font-mono"
               />
               <p className="text-xs text-muted-foreground">
-                Auto-exit all positions if loss exceeds this
+                Auto-exit all positions if loss exceeds this. Leave empty for no limit.
               </p>
             </div>
 
