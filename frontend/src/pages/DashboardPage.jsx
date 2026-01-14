@@ -30,6 +30,7 @@ const DashboardPage = () => {
     trades,
     stats,
     isLoading,
+    isLiveData,
     fetchSpotHistory,
     fetchPositions,
     fetchTrades,
@@ -139,12 +140,22 @@ const DashboardPage = () => {
         <Card className="bg-card border-border">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">NIFTY 50</span>
-              <Activity className="w-4 h-4 text-emerald-500" />
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground uppercase tracking-wider">NIFTY 50</span>
+                {isLiveData && (
+                  <Badge className="text-[10px] bg-emerald-500/20 text-emerald-500 border-emerald-500/30 animate-pulse">
+                    LIVE
+                  </Badge>
+                )}
+              </div>
+              <Activity className={cn("w-4 h-4", isLiveData ? "text-emerald-500" : "text-amber-500")} />
             </div>
             <div className="font-mono text-2xl font-bold tracking-tight">
               {spotPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
             </div>
+            {!isLiveData && (
+              <p className="text-[10px] text-amber-500 mt-1">Simulated data</p>
+            )}
           </CardContent>
         </Card>
 
