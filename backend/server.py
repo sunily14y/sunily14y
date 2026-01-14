@@ -231,6 +231,23 @@ async def fetch_live_nifty_spot(session_id: str) -> Optional[float]:
         logger.error(f"Error fetching live NIFTY spot: {e}")
     return None
 
+async def fetch_live_nifty_spot_any_session() -> Optional[float]:
+    """Fetch live NIFTY 50 spot price using any authenticated session"""
+    try:
+        # Find any session with valid access token
+        session = await db.sessions.find_one(
+            {"access_token": {"$exists": True, "$ne": None}},
+            {"_id": 0}
+        )
+        if session and session.get("access_token"):
+            k = get_kite_for_session(session["access_token"])
+            quote = k.quote(["NSE:NIFTY 50"])
+            if "NSE:NIFTY 50" in quote:
+                return quote["NSE:NIFTY 50"]["last_price"]
+    except Exception as e:
+        logger.error(f"Error fetching live NIFTY spot (any session): {e}")
+    return None
+
 async def fetch_live_option_ltp(session_id: str, symbol: str) -> Optional[float]:
     """Fetch live option LTP"""
     try:
@@ -243,26 +260,36 @@ async def fetch_live_option_ltp(session_id: str, symbol: str) -> Optional[float]
         logger.error(f"Error fetching option LTP for {symbol}: {e}")
     return None
 
-async def place_live_order(session_id: str, symbol: str, transaction_type: str, quantity: int, order_type: str = "MARKET") -> Optional[str]:
-    """Place live order on Zerodha"""
+async def fetch_live_option_ltp_any_session(symbol: str) -> Optional[float]:
+    """Fetch live option LTP using any authenticated session"""
     try:
-        k = await get_session_kite(session_id)
-        if k:
-            order_id = k.place_order(
-                tradingsymbol=symbol,
-                exchange="NFO",
-                transaction_type=transaction_type,
-                quantity=quantity,
-                order_type=order_type,
-                product="MIS",  # Intraday
-                variety="regular"
-            )
-            logger.info(f"Order placed: {order_id} for {symbol}")
-            return str(order_id)
+        session = await db.sessions.find_one(
+            {"access_token": {"$exists": True, "$ne": None}},
+            {"_id": 0}
+        )
+        if session and session.get("access_token"):
+            k = get_kite_for_session(session["access_token"])
+            quote = k.quote([f"NFO:{symbol}"])
+            if f"NFO:{symbol}" in quote:
+                return quote[f"NFO:{symbol}"]["last_price"]
     except Exception as e:
-        logger.error(f"Error placing order for {symbol}: {e}")
-        raise HTTPException(status_code=400, detail=f"Order failed: {str(e)}")
+        logger.error(f"Error fetching option LTP for {symbol} (any session): {e}")
     return None
+
+async def get_live_spot_price() -> tuple[float, bool]:
+    """Get live spot price, returns (price, is_live)"""
+    # Try to get live data from any authenticated session
+    live_price = await fetch_live_nifty_spot_any_session()
+    if live_price:
+        return live_price, True
+    return get_mock_nifty_spot(), False
+
+async def get_live_option_price(symbol: str, strike: int, option_type: str, spot_price: float) -> tuple[float, bool]:
+    """Get live option price, returns (price, is_live)"""
+    live_price = await fetch_live_option_ltp_any_session(symbol)
+    if live_price:
+        return live_price, True
+    return get_mock_option_premium(spot_price, strike, option_type), False
 
 # ====================== TRADING ENGINE ======================
 class TradingEngine:
