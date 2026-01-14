@@ -50,10 +50,10 @@ class OrderAction(str, Enum):
 
 # ====================== MODELS ======================
 class StrategyConfig(BaseModel):
-    lot_size: int = Field(default=1, ge=1, le=100)
-    adjustment_zone: int = Field(default=50, ge=10, le=200)
-    strike_distance: int = Field(default=200, ge=50, le=500)
-    max_daily_loss: Optional[float] = Field(default=None)
+    lot_size: int = Field(default=1, ge=1)  # No upper limit - user decides
+    adjustment_zone: int = Field(default=50, ge=10)  # Minimum 10 points
+    strike_distance: int = Field(default=200, ge=50)  # Minimum 50 points
+    max_daily_loss: Optional[float] = Field(default=None)  # Optional - user sets any amount
     max_trades_per_day: Optional[int] = Field(default=None)
     entry_time: str = Field(default="09:20")
     exit_time: str = Field(default="15:15")

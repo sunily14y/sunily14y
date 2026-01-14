@@ -13,10 +13,12 @@ import {
   RefreshCw,
   ArrowUpRight,
   ArrowDownRight,
-  Zap
+  Zap,
+  Settings
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { toast } from "sonner";
+import StrategyConfigModal from "../components/StrategyConfigModal";
 
 const DashboardPage = () => {
   const {
@@ -38,6 +40,7 @@ const DashboardPage = () => {
 
   const [isStarting, setIsStarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
+  const [showConfigModal, setShowConfigModal] = useState(false);
 
   useEffect(() => {
     fetchSpotHistory(60);
@@ -45,6 +48,10 @@ const DashboardPage = () => {
     fetchTrades(10);
     fetchStats();
   }, []);
+
+  const handleOpenConfigModal = () => {
+    setShowConfigModal(true);
+  };
 
   const handleStartStrategy = async () => {
     setIsStarting(true);
@@ -74,6 +81,12 @@ const DashboardPage = () => {
   const isProfitable = totalPnL >= 0;
 
   return (
+    <>
+    <StrategyConfigModal 
+      open={showConfigModal} 
+      onOpenChange={setShowConfigModal}
+      onStart={handleStartStrategy}
+    />
     <div className="space-y-6">
       {/* Header with controls */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -88,16 +101,18 @@ const DashboardPage = () => {
           {!strategyState.is_active ? (
             <Button
               data-testid="start-strategy-btn"
-              onClick={handleStartStrategy}
+              onClick={handleOpenConfigModal}
               disabled={isStarting || isLoading}
               className="bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-600/20"
             >
               {isStarting ? (
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
               ) : (
-                <Play className="w-4 h-4 mr-2" />
+                <>
+                  <Settings className="w-4 h-4 mr-2" />
+                  Configure & Start
+                </>
               )}
-              Start Strategy
             </Button>
           ) : (
             <Button
@@ -406,6 +421,7 @@ const DashboardPage = () => {
         </Card>
       </div>
     </div>
+    </>
   );
 };
 
