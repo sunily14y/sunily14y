@@ -14,6 +14,7 @@ import hashlib
 import asyncio
 from enum import Enum
 import random
+from kiteconnect import KiteConnect
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -23,10 +24,10 @@ mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
-# Zerodha Config (will be provided by user)
+# Zerodha Config
 ZERODHA_API_KEY = os.environ.get('ZERODHA_API_KEY', '')
 ZERODHA_API_SECRET = os.environ.get('ZERODHA_API_SECRET', '')
-ZERODHA_REDIRECT_URL = os.environ.get('ZERODHA_REDIRECT_URL', 'http://localhost:3000/callback')
+ZERODHA_REDIRECT_URL = os.environ.get('ZERODHA_REDIRECT_URL', 'https://dynastrangle-algo.preview.emergentagent.com/api/auth/callback')
 
 app = FastAPI(title="NiftyAlgo Trading System")
 api_router = APIRouter(prefix="/api")
@@ -34,6 +35,9 @@ api_router = APIRouter(prefix="/api")
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# Global Kite instance
+kite = KiteConnect(api_key=ZERODHA_API_KEY) if ZERODHA_API_KEY else None
 
 # ====================== ENUMS ======================
 class TradingMode(str, Enum):
@@ -50,10 +54,10 @@ class OrderAction(str, Enum):
 
 # ====================== MODELS ======================
 class StrategyConfig(BaseModel):
-    lot_size: int = Field(default=1, ge=1)  # No upper limit - user decides
-    adjustment_zone: int = Field(default=50, ge=10)  # Minimum 10 points
-    strike_distance: int = Field(default=200, ge=50)  # Minimum 50 points
-    max_daily_loss: Optional[float] = Field(default=None)  # Optional - user sets any amount
+    lot_size: int = Field(default=1, ge=1)
+    adjustment_zone: int = Field(default=50, ge=10)
+    strike_distance: int = Field(default=200, ge=50)
+    max_daily_loss: Optional[float] = Field(default=None)
     max_trades_per_day: Optional[int] = Field(default=None)
     entry_time: str = Field(default="09:20")
     exit_time: str = Field(default="15:15")
@@ -94,6 +98,7 @@ class Trade(BaseModel):
     action: OrderAction
     quantity: int
     price: float
+    order_id: Optional[str] = None
     is_adjustment: bool = False
     adjustment_reason: Optional[str] = None
     paper_trade: bool = True
@@ -105,6 +110,8 @@ class StrategyState(BaseModel):
     is_active: bool = False
     ce_strike: Optional[int] = None
     pe_strike: Optional[int] = None
+    ce_symbol: Optional[str] = None
+    pe_symbol: Optional[str] = None
     adjustment_count: int = 0
     total_pnl: float = 0.0
     daily_pnl: float = 0.0
@@ -124,6 +131,8 @@ class OptionsChainItem(BaseModel):
     strike: int
     ce_ltp: float
     pe_ltp: float
+    ce_symbol: str = ""
+    pe_symbol: str = ""
     ce_iv: float = 0.0
     pe_iv: float = 0.0
     ce_oi: int = 0
@@ -131,8 +140,38 @@ class OptionsChainItem(BaseModel):
     ce_volume: int = 0
     pe_volume: int = 0
 
-# ====================== MOCK DATA GENERATORS ======================
-# These simulate Zerodha API responses for paper trading
+# ====================== KITE CONNECT HELPERS ======================
+
+def get_kite_for_session(access_token: str) -> KiteConnect:
+    """Get a Kite instance with access token set"""
+    k = KiteConnect(api_key=ZERODHA_API_KEY)
+    k.set_access_token(access_token)
+    return k
+
+async def get_session_kite(session_id: str) -> Optional[KiteConnect]:
+    """Get Kite instance for a session if authenticated"""
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if session and session.get("access_token"):
+        return get_kite_for_session(session["access_token"])
+    return None
+
+def get_nifty_weekly_expiry():
+    """Get current week's NIFTY expiry (Thursday)"""
+    today = datetime.now()
+    days_until_thursday = (3 - today.weekday()) % 7
+    if days_until_thursday == 0 and today.hour >= 15:
+        days_until_thursday = 7
+    expiry = today + timedelta(days=days_until_thursday)
+    return expiry.strftime("%y%b%d").upper()  # e.g., "25JAN16"
+
+def format_nifty_option_symbol(strike: int, option_type: str, expiry: str = None):
+    """Format NIFTY option trading symbol"""
+    if not expiry:
+        expiry = get_nifty_weekly_expiry()
+    # Format: NIFTY25JAN2650CE
+    return f"NIFTY{expiry}{strike}{option_type}"
+
+# ====================== MOCK DATA (Fallback) ======================
 
 def get_mock_nifty_spot() -> float:
     """Generate realistic NIFTY spot price around 26000"""
@@ -148,8 +187,6 @@ def get_mock_option_premium(spot: float, strike: int, option_type: str) -> float
     else:
         intrinsic = max(0, strike - spot)
         time_value = random.uniform(20, 80)
-    
-    # Add some randomness for realistic premium
     premium = intrinsic + time_value + random.uniform(-10, 10)
     return max(5, round(premium, 2))
 
@@ -157,6 +194,7 @@ def get_mock_options_chain(spot_price: float) -> List[OptionsChainItem]:
     """Generate mock options chain data"""
     atm_strike = round(spot_price / 50) * 50
     chain = []
+    expiry = get_nifty_weekly_expiry()
     
     for i in range(-10, 11):
         strike = atm_strike + (i * 50)
@@ -167,6 +205,8 @@ def get_mock_options_chain(spot_price: float) -> List[OptionsChainItem]:
             strike=strike,
             ce_ltp=ce_ltp,
             pe_ltp=pe_ltp,
+            ce_symbol=format_nifty_option_symbol(strike, "CE", expiry),
+            pe_symbol=format_nifty_option_symbol(strike, "PE", expiry),
             ce_iv=round(random.uniform(10, 25), 2),
             pe_iv=round(random.uniform(10, 25), 2),
             ce_oi=random.randint(10000, 500000),
@@ -176,6 +216,53 @@ def get_mock_options_chain(spot_price: float) -> List[OptionsChainItem]:
         ))
     
     return chain
+
+# ====================== LIVE DATA FETCHERS ======================
+
+async def fetch_live_nifty_spot(session_id: str) -> Optional[float]:
+    """Fetch live NIFTY 50 spot price from Zerodha"""
+    try:
+        k = await get_session_kite(session_id)
+        if k:
+            quote = k.quote(["NSE:NIFTY 50"])
+            if "NSE:NIFTY 50" in quote:
+                return quote["NSE:NIFTY 50"]["last_price"]
+    except Exception as e:
+        logger.error(f"Error fetching live NIFTY spot: {e}")
+    return None
+
+async def fetch_live_option_ltp(session_id: str, symbol: str) -> Optional[float]:
+    """Fetch live option LTP"""
+    try:
+        k = await get_session_kite(session_id)
+        if k:
+            quote = k.quote([f"NFO:{symbol}"])
+            if f"NFO:{symbol}" in quote:
+                return quote[f"NFO:{symbol}"]["last_price"]
+    except Exception as e:
+        logger.error(f"Error fetching option LTP for {symbol}: {e}")
+    return None
+
+async def place_live_order(session_id: str, symbol: str, transaction_type: str, quantity: int, order_type: str = "MARKET") -> Optional[str]:
+    """Place live order on Zerodha"""
+    try:
+        k = await get_session_kite(session_id)
+        if k:
+            order_id = k.place_order(
+                tradingsymbol=symbol,
+                exchange="NFO",
+                transaction_type=transaction_type,
+                quantity=quantity,
+                order_type=order_type,
+                product="MIS",  # Intraday
+                variety="regular"
+            )
+            logger.info(f"Order placed: {order_id} for {symbol}")
+            return str(order_id)
+    except Exception as e:
+        logger.error(f"Error placing order for {symbol}: {e}")
+        raise HTTPException(status_code=400, detail=f"Order failed: {str(e)}")
+    return None
 
 # ====================== TRADING ENGINE ======================
 class TradingEngine:
@@ -203,7 +290,6 @@ class TradingEngine:
         """Main strategy execution loop"""
         try:
             while True:
-                # Get session and config
                 session_data = await db.sessions.find_one({"id": session_id}, {"_id": 0})
                 if not session_data:
                     break
@@ -215,13 +301,21 @@ class TradingEngine:
                 config = StrategyConfig(**session_data.get("config", {}))
                 state = StrategyState(**state_data)
                 
-                # Get current spot price
-                spot_price = get_mock_nifty_spot()
+                # Get current spot price (live or mock)
+                is_live = config.trading_mode == TradingMode.LIVE and session_data.get("access_token")
+                
+                if is_live:
+                    spot_price = await fetch_live_nifty_spot(session_id)
+                    if not spot_price:
+                        spot_price = get_mock_nifty_spot()
+                else:
+                    spot_price = get_mock_nifty_spot()
+                
                 state.last_spot_price = spot_price
                 
                 # Check adjustment conditions
                 if state.ce_strike and state.pe_strike:
-                    await self._check_and_adjust(session_id, config, state, spot_price)
+                    await self._check_and_adjust(session_id, config, state, spot_price, is_live)
                 
                 # Update state
                 await db.strategy_states.update_one(
@@ -232,7 +326,6 @@ class TradingEngine:
                     }}
                 )
                 
-                # Sleep for 2 seconds between checks
                 await asyncio.sleep(2)
                 
         except asyncio.CancelledError:
@@ -240,23 +333,21 @@ class TradingEngine:
         except Exception as e:
             logger.error(f"Error in strategy loop: {str(e)}")
     
-    async def _check_and_adjust(self, session_id: str, config: StrategyConfig, state: StrategyState, spot_price: float):
+    async def _check_and_adjust(self, session_id: str, config: StrategyConfig, state: StrategyState, spot_price: float, is_live: bool):
         """Check if adjustment is needed and execute"""
         adjustment_zone = config.adjustment_zone
         
-        # Check CALL side - if spot moves UP within adjustment zone of sold CE
+        # Check CALL side
         if spot_price >= state.ce_strike - adjustment_zone:
-            # Need to shift both legs UP by 50 points
-            await self._shift_strangle(session_id, config, state, spot_price, "UP")
-        
-        # Check PUT side - if spot moves DOWN within adjustment zone of sold PE
+            await self._shift_strangle(session_id, config, state, spot_price, "UP", is_live)
+        # Check PUT side
         elif spot_price <= state.pe_strike + adjustment_zone:
-            # Need to shift both legs DOWN by 50 points
-            await self._shift_strangle(session_id, config, state, spot_price, "DOWN")
+            await self._shift_strangle(session_id, config, state, spot_price, "DOWN", is_live)
     
-    async def _shift_strangle(self, session_id: str, config: StrategyConfig, state: StrategyState, spot_price: float, direction: str):
+    async def _shift_strangle(self, session_id: str, config: StrategyConfig, state: StrategyState, spot_price: float, direction: str, is_live: bool):
         """Shift both legs of the strangle"""
         shift_amount = 50
+        expiry = get_nifty_weekly_expiry()
         
         if direction == "UP":
             new_ce_strike = state.ce_strike + shift_amount
@@ -267,101 +358,74 @@ class TradingEngine:
             new_pe_strike = state.pe_strike - shift_amount
             reason = f"NIFTY moved DOWN to {spot_price}, near PE strike {state.pe_strike}"
         
-        # Exit current positions
-        ce_exit_price = get_mock_option_premium(spot_price, state.ce_strike, "CE")
-        pe_exit_price = get_mock_option_premium(spot_price, state.pe_strike, "PE")
+        lot_size = config.lot_size * 25
         
-        # Enter new positions
-        new_ce_price = get_mock_option_premium(spot_price, new_ce_strike, "CE")
-        new_pe_price = get_mock_option_premium(spot_price, new_pe_strike, "PE")
+        # Get prices
+        if is_live:
+            ce_exit_price = await fetch_live_option_ltp(session_id, state.ce_symbol) or get_mock_option_premium(spot_price, state.ce_strike, "CE")
+            pe_exit_price = await fetch_live_option_ltp(session_id, state.pe_symbol) or get_mock_option_premium(spot_price, state.pe_strike, "PE")
+        else:
+            ce_exit_price = get_mock_option_premium(spot_price, state.ce_strike, "CE")
+            pe_exit_price = get_mock_option_premium(spot_price, state.pe_strike, "PE")
         
-        lot_size = config.lot_size * 25  # NIFTY lot size is 25
+        new_ce_symbol = format_nifty_option_symbol(new_ce_strike, "CE", expiry)
+        new_pe_symbol = format_nifty_option_symbol(new_pe_strike, "PE", expiry)
+        
+        if is_live:
+            new_ce_price = await fetch_live_option_ltp(session_id, new_ce_symbol) or get_mock_option_premium(spot_price, new_ce_strike, "CE")
+            new_pe_price = await fetch_live_option_ltp(session_id, new_pe_symbol) or get_mock_option_premium(spot_price, new_pe_strike, "PE")
+        else:
+            new_ce_price = get_mock_option_premium(spot_price, new_ce_strike, "CE")
+            new_pe_price = get_mock_option_premium(spot_price, new_pe_strike, "PE")
+        
+        # Place orders (live mode)
+        order_ids = {"ce_exit": None, "pe_exit": None, "ce_entry": None, "pe_entry": None}
+        
+        if is_live:
+            try:
+                order_ids["ce_exit"] = await place_live_order(session_id, state.ce_symbol, "BUY", lot_size)
+                order_ids["pe_exit"] = await place_live_order(session_id, state.pe_symbol, "BUY", lot_size)
+                order_ids["ce_entry"] = await place_live_order(session_id, new_ce_symbol, "SELL", lot_size)
+                order_ids["pe_entry"] = await place_live_order(session_id, new_pe_symbol, "SELL", lot_size)
+            except Exception as e:
+                logger.error(f"Error placing adjustment orders: {e}")
+                return
         
         # Record trades
         trades = [
-            # Exit old CE
-            Trade(
-                session_id=session_id,
-                symbol=f"NIFTY{state.ce_strike}CE",
-                strike=state.ce_strike,
-                position_type=PositionType.CE,
-                action=OrderAction.BUY,
-                quantity=lot_size,
-                price=ce_exit_price,
-                is_adjustment=True,
-                adjustment_reason=reason,
-                paper_trade=config.trading_mode == TradingMode.PAPER
-            ),
-            # Exit old PE
-            Trade(
-                session_id=session_id,
-                symbol=f"NIFTY{state.pe_strike}PE",
-                strike=state.pe_strike,
-                position_type=PositionType.PE,
-                action=OrderAction.BUY,
-                quantity=lot_size,
-                price=pe_exit_price,
-                is_adjustment=True,
-                adjustment_reason=reason,
-                paper_trade=config.trading_mode == TradingMode.PAPER
-            ),
-            # Enter new CE
-            Trade(
-                session_id=session_id,
-                symbol=f"NIFTY{new_ce_strike}CE",
-                strike=new_ce_strike,
-                position_type=PositionType.CE,
-                action=OrderAction.SELL,
-                quantity=lot_size,
-                price=new_ce_price,
-                is_adjustment=True,
-                adjustment_reason=reason,
-                paper_trade=config.trading_mode == TradingMode.PAPER
-            ),
-            # Enter new PE
-            Trade(
-                session_id=session_id,
-                symbol=f"NIFTY{new_pe_strike}PE",
-                strike=new_pe_strike,
-                position_type=PositionType.PE,
-                action=OrderAction.SELL,
-                quantity=lot_size,
-                price=new_pe_price,
-                is_adjustment=True,
-                adjustment_reason=reason,
-                paper_trade=config.trading_mode == TradingMode.PAPER
-            )
+            Trade(session_id=session_id, symbol=state.ce_symbol, strike=state.ce_strike, position_type=PositionType.CE, action=OrderAction.BUY, quantity=lot_size, price=ce_exit_price, order_id=order_ids["ce_exit"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
+            Trade(session_id=session_id, symbol=state.pe_symbol, strike=state.pe_strike, position_type=PositionType.PE, action=OrderAction.BUY, quantity=lot_size, price=pe_exit_price, order_id=order_ids["pe_exit"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
+            Trade(session_id=session_id, symbol=new_ce_symbol, strike=new_ce_strike, position_type=PositionType.CE, action=OrderAction.SELL, quantity=lot_size, price=new_ce_price, order_id=order_ids["ce_entry"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
+            Trade(session_id=session_id, symbol=new_pe_symbol, strike=new_pe_strike, position_type=PositionType.PE, action=OrderAction.SELL, quantity=lot_size, price=new_pe_price, order_id=order_ids["pe_entry"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
         ]
         
-        # Insert trades
         for trade in trades:
             trade_doc = trade.model_dump()
             trade_doc['timestamp'] = trade_doc['timestamp'].isoformat()
             await db.trades.insert_one(trade_doc)
         
         # Update state
-        adjustment_count = state.adjustment_count + 1
-        
         await db.strategy_states.update_one(
             {"session_id": session_id},
             {"$set": {
                 "ce_strike": new_ce_strike,
                 "pe_strike": new_pe_strike,
-                "adjustment_count": adjustment_count,
+                "ce_symbol": new_ce_symbol,
+                "pe_symbol": new_pe_symbol,
+                "adjustment_count": state.adjustment_count + 1,
                 "last_update": datetime.now(timezone.utc).isoformat()
             }}
         )
         
-        logger.info(f"Adjustment #{adjustment_count}: {direction} shift. New CE: {new_ce_strike}, New PE: {new_pe_strike}")
+        logger.info(f"Adjustment #{state.adjustment_count + 1}: {direction} shift. New CE: {new_ce_strike}, New PE: {new_pe_strike}")
 
-# Global trading engine instance
 trading_engine = TradingEngine()
 
 # ====================== API ROUTES ======================
 
 @api_router.get("/")
 async def root():
-    return {"message": "NiftyAlgo Trading System API", "version": "1.0.0"}
+    return {"message": "NiftyAlgo Trading System API", "version": "1.0.0", "kite_configured": bool(ZERODHA_API_KEY)}
 
 # Session Management
 @api_router.post("/session/create")
@@ -374,7 +438,6 @@ async def create_session():
     
     await db.sessions.insert_one(session_dict)
     
-    # Create initial strategy state
     state = StrategyState(session_id=session.id)
     state_dict = state.model_dump()
     state_dict['last_update'] = state_dict['last_update'].isoformat()
@@ -401,21 +464,69 @@ async def update_config(session_id: str, config: StrategyConfig):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"success": True, "config": config.model_dump()}
 
-# Zerodha Auth (Mock for Paper Trading)
+# Zerodha Auth
 @api_router.get("/auth/login-url")
 async def get_login_url(session_id: str):
     """Get Zerodha login URL"""
     if ZERODHA_API_KEY:
-        login_url = f"https://kite.zerodha.com/connect/login?v=3&api_key={ZERODHA_API_KEY}"
+        login_url = kite.login_url()
+        # Store session_id for callback
+        await db.sessions.update_one(
+            {"id": session_id},
+            {"$set": {"pending_auth": True}}
+        )
+        return {"login_url": f"{login_url}&state={session_id}", "is_mock": False}
     else:
-        # Mock login for paper trading
-        login_url = f"/callback?request_token=mock_token&session_id={session_id}"
-    return {"login_url": login_url, "is_mock": not bool(ZERODHA_API_KEY)}
+        return {"login_url": f"/callback?request_token=mock_token&session_id={session_id}", "is_mock": True}
+
+@api_router.get("/auth/callback")
+async def auth_callback(request_token: str, session_id: str = None, state: str = None):
+    """Handle Zerodha OAuth callback"""
+    sid = session_id or state
+    
+    if not sid:
+        raise HTTPException(status_code=400, detail="Session ID required")
+    
+    try:
+        if ZERODHA_API_KEY and ZERODHA_API_SECRET and request_token != "mock_token":
+            # Real Zerodha authentication
+            data = kite.generate_session(request_token, api_secret=ZERODHA_API_SECRET)
+            
+            await db.sessions.update_one(
+                {"id": sid},
+                {"$set": {
+                    "is_authenticated": True,
+                    "zerodha_user_id": data.get("user_id"),
+                    "access_token": data.get("access_token"),
+                    "public_token": data.get("public_token"),
+                    "login_time": datetime.now(timezone.utc).isoformat(),
+                    "pending_auth": False
+                }}
+            )
+            
+            logger.info(f"Zerodha authentication successful for user {data.get('user_id')}")
+            
+            # Redirect to frontend dashboard
+            return RedirectResponse(url="https://dynastrangle-algo.preview.emergentagent.com/dashboard?auth=success")
+        else:
+            # Mock authentication for paper trading
+            await db.sessions.update_one(
+                {"id": sid},
+                {"$set": {
+                    "is_authenticated": True,
+                    "zerodha_user_id": f"PAPER_{sid[:8]}",
+                    "login_time": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            return {"success": True, "message": "Paper trading authenticated"}
+            
+    except Exception as e:
+        logger.error(f"Authentication failed: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Authentication failed: {str(e)}")
 
 @api_router.post("/auth/callback")
-async def auth_callback(session_id: str, request_token: str = "mock_token"):
-    """Handle Zerodha OAuth callback"""
-    # For paper trading, we just mark as authenticated
+async def auth_callback_post(session_id: str, request_token: str = "mock_token"):
+    """Handle POST callback (for paper trading)"""
     await db.sessions.update_one(
         {"id": session_id},
         {"$set": {
@@ -428,9 +539,18 @@ async def auth_callback(session_id: str, request_token: str = "mock_token"):
 
 # Market Data
 @api_router.get("/market/spot")
-async def get_nifty_spot():
+async def get_nifty_spot(session_id: str = None):
     """Get current NIFTY 50 spot price"""
-    spot_price = get_mock_nifty_spot()
+    spot_price = None
+    is_live = False
+    
+    if session_id:
+        spot_price = await fetch_live_nifty_spot(session_id)
+        is_live = spot_price is not None
+    
+    if not spot_price:
+        spot_price = get_mock_nifty_spot()
+    
     return MarketData(
         spot_price=spot_price,
         timestamp=datetime.now(timezone.utc),
@@ -441,9 +561,16 @@ async def get_nifty_spot():
     )
 
 @api_router.get("/market/options-chain")
-async def get_options_chain():
+async def get_options_chain(session_id: str = None):
     """Get NIFTY options chain"""
-    spot_price = get_mock_nifty_spot()
+    spot_price = None
+    
+    if session_id:
+        spot_price = await fetch_live_nifty_spot(session_id)
+    
+    if not spot_price:
+        spot_price = get_mock_nifty_spot()
+    
     chain = get_mock_options_chain(spot_price)
     atm_strike = round(spot_price / 50) * 50
     
@@ -463,7 +590,6 @@ async def get_spot_history(minutes: int = 60):
     
     for i in range(minutes, 0, -1):
         timestamp = now - timedelta(minutes=i)
-        # Simulate price movement
         variation = random.uniform(-50, 50) * (1 + 0.1 * random.random())
         price = base_price + variation + (i * random.uniform(-0.5, 0.5))
         history.append({
@@ -482,41 +608,48 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=404, detail="Session not found")
     
     config = StrategyConfig(**session.get("config", {}))
+    is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
     
-    # Get current spot price and calculate strikes
-    spot_price = get_mock_nifty_spot()
+    # Get current spot price
+    if is_live:
+        spot_price = await fetch_live_nifty_spot(session_id)
+        if not spot_price:
+            spot_price = get_mock_nifty_spot()
+    else:
+        spot_price = get_mock_nifty_spot()
+    
     atm_strike = round(spot_price / 50) * 50
     ce_strike = atm_strike + config.strike_distance
     pe_strike = atm_strike - config.strike_distance
     
-    lot_size = config.lot_size * 25  # NIFTY lot size is 25
+    lot_size = config.lot_size * 25
+    expiry = get_nifty_weekly_expiry()
+    
+    ce_symbol = format_nifty_option_symbol(ce_strike, "CE", expiry)
+    pe_symbol = format_nifty_option_symbol(pe_strike, "PE", expiry)
     
     # Get option premiums
-    ce_price = get_mock_option_premium(spot_price, ce_strike, "CE")
-    pe_price = get_mock_option_premium(spot_price, pe_strike, "PE")
+    if is_live:
+        ce_price = await fetch_live_option_ltp(session_id, ce_symbol) or get_mock_option_premium(spot_price, ce_strike, "CE")
+        pe_price = await fetch_live_option_ltp(session_id, pe_symbol) or get_mock_option_premium(spot_price, pe_strike, "PE")
+    else:
+        ce_price = get_mock_option_premium(spot_price, ce_strike, "CE")
+        pe_price = get_mock_option_premium(spot_price, pe_strike, "PE")
     
-    # Create initial trades
+    # Place orders
+    order_ids = {"ce": None, "pe": None}
+    
+    if is_live:
+        try:
+            order_ids["ce"] = await place_live_order(session_id, ce_symbol, "SELL", lot_size)
+            order_ids["pe"] = await place_live_order(session_id, pe_symbol, "SELL", lot_size)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Order placement failed: {str(e)}")
+    
+    # Create trades
     trades = [
-        Trade(
-            session_id=session_id,
-            symbol=f"NIFTY{ce_strike}CE",
-            strike=ce_strike,
-            position_type=PositionType.CE,
-            action=OrderAction.SELL,
-            quantity=lot_size,
-            price=ce_price,
-            paper_trade=config.trading_mode == TradingMode.PAPER
-        ),
-        Trade(
-            session_id=session_id,
-            symbol=f"NIFTY{pe_strike}PE",
-            strike=pe_strike,
-            position_type=PositionType.PE,
-            action=OrderAction.SELL,
-            quantity=lot_size,
-            price=pe_price,
-            paper_trade=config.trading_mode == TradingMode.PAPER
-        )
+        Trade(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, action=OrderAction.SELL, quantity=lot_size, price=ce_price, order_id=order_ids["ce"], paper_trade=not is_live),
+        Trade(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, action=OrderAction.SELL, quantity=lot_size, price=pe_price, order_id=order_ids["pe"], paper_trade=not is_live)
     ]
     
     for trade in trades:
@@ -526,24 +659,8 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
     
     # Create positions
     positions = [
-        Position(
-            session_id=session_id,
-            symbol=f"NIFTY{ce_strike}CE",
-            strike=ce_strike,
-            position_type=PositionType.CE,
-            quantity=-lot_size,  # Negative for short
-            entry_price=ce_price,
-            current_price=ce_price
-        ),
-        Position(
-            session_id=session_id,
-            symbol=f"NIFTY{pe_strike}PE",
-            strike=pe_strike,
-            position_type=PositionType.PE,
-            quantity=-lot_size,
-            entry_price=pe_price,
-            current_price=pe_price
-        )
+        Position(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, quantity=-lot_size, entry_price=ce_price, current_price=ce_price),
+        Position(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, quantity=-lot_size, entry_price=pe_price, current_price=pe_price)
     ]
     
     for pos in positions:
@@ -558,6 +675,8 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
             "is_active": True,
             "ce_strike": ce_strike,
             "pe_strike": pe_strike,
+            "ce_symbol": ce_symbol,
+            "pe_symbol": pe_symbol,
             "adjustment_count": 0,
             "last_spot_price": spot_price,
             "start_time": datetime.now(timezone.utc).isoformat(),
@@ -565,17 +684,19 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
         }}
     )
     
-    # Start automated monitoring
     await trading_engine.start_strategy(session_id)
     
     return {
         "success": True,
+        "is_live": is_live,
         "spot_price": spot_price,
         "ce_strike": ce_strike,
         "pe_strike": pe_strike,
+        "ce_symbol": ce_symbol,
+        "pe_symbol": pe_symbol,
         "ce_premium": ce_price,
         "pe_premium": pe_price,
-        "message": f"Strategy started. Sold {ce_strike}CE @ {ce_price} and {pe_strike}PE @ {pe_price}"
+        "message": f"Strategy started {'(LIVE)' if is_live else '(PAPER)'}. Sold {ce_symbol} @ {ce_price} and {pe_symbol} @ {pe_price}"
     }
 
 @api_router.post("/strategy/stop")
@@ -587,39 +708,42 @@ async def stop_strategy(session_id: str):
     
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     config = StrategyConfig(**session.get("config", {}))
+    is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
     
-    spot_price = get_mock_nifty_spot()
+    # Get spot price
+    if is_live:
+        spot_price = await fetch_live_nifty_spot(session_id) or get_mock_nifty_spot()
+    else:
+        spot_price = get_mock_nifty_spot()
+    
     lot_size = config.lot_size * 25
-    
-    # Exit positions
     ce_strike = state.get("ce_strike")
     pe_strike = state.get("pe_strike")
+    ce_symbol = state.get("ce_symbol")
+    pe_symbol = state.get("pe_symbol")
     
-    ce_exit_price = get_mock_option_premium(spot_price, ce_strike, "CE")
-    pe_exit_price = get_mock_option_premium(spot_price, pe_strike, "PE")
+    # Get exit prices
+    if is_live:
+        ce_exit_price = await fetch_live_option_ltp(session_id, ce_symbol) or get_mock_option_premium(spot_price, ce_strike, "CE")
+        pe_exit_price = await fetch_live_option_ltp(session_id, pe_symbol) or get_mock_option_premium(spot_price, pe_strike, "PE")
+    else:
+        ce_exit_price = get_mock_option_premium(spot_price, ce_strike, "CE")
+        pe_exit_price = get_mock_option_premium(spot_price, pe_strike, "PE")
+    
+    # Place exit orders
+    order_ids = {"ce": None, "pe": None}
+    
+    if is_live:
+        try:
+            order_ids["ce"] = await place_live_order(session_id, ce_symbol, "BUY", lot_size)
+            order_ids["pe"] = await place_live_order(session_id, pe_symbol, "BUY", lot_size)
+        except Exception as e:
+            logger.error(f"Error placing exit orders: {e}")
     
     # Record exit trades
     trades = [
-        Trade(
-            session_id=session_id,
-            symbol=f"NIFTY{ce_strike}CE",
-            strike=ce_strike,
-            position_type=PositionType.CE,
-            action=OrderAction.BUY,
-            quantity=lot_size,
-            price=ce_exit_price,
-            paper_trade=config.trading_mode == TradingMode.PAPER
-        ),
-        Trade(
-            session_id=session_id,
-            symbol=f"NIFTY{pe_strike}PE",
-            strike=pe_strike,
-            position_type=PositionType.PE,
-            action=OrderAction.BUY,
-            quantity=lot_size,
-            price=pe_exit_price,
-            paper_trade=config.trading_mode == TradingMode.PAPER
-        )
+        Trade(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, action=OrderAction.BUY, quantity=lot_size, price=ce_exit_price, order_id=order_ids["ce"], paper_trade=not is_live),
+        Trade(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, action=OrderAction.BUY, quantity=lot_size, price=pe_exit_price, order_id=order_ids["pe"], paper_trade=not is_live)
     ]
     
     for trade in trades:
@@ -627,29 +751,22 @@ async def stop_strategy(session_id: str):
         trade_doc['timestamp'] = trade_doc['timestamp'].isoformat()
         await db.trades.insert_one(trade_doc)
     
-    # Calculate P&L from positions
+    # Calculate P&L
     positions = await db.positions.find({"session_id": session_id}, {"_id": 0}).to_list(100)
     total_pnl = 0
     
     for pos in positions:
         if pos.get("position_type") == "CE":
-            entry = pos.get("entry_price", 0)
             exit_p = ce_exit_price
         else:
-            entry = pos.get("entry_price", 0)
             exit_p = pe_exit_price
-        
-        # For short positions: profit when price goes down
+        entry = pos.get("entry_price", 0)
         pnl = (entry - exit_p) * abs(pos.get("quantity", 0))
         total_pnl += pnl
     
-    # Clear positions
     await db.positions.delete_many({"session_id": session_id})
-    
-    # Stop trading engine
     await trading_engine.stop_strategy(session_id)
     
-    # Update strategy state
     await db.strategy_states.update_one(
         {"session_id": session_id},
         {"$set": {
@@ -661,10 +778,11 @@ async def stop_strategy(session_id: str):
     
     return {
         "success": True,
+        "is_live": is_live,
         "total_pnl": round(total_pnl, 2),
         "ce_exit_price": ce_exit_price,
         "pe_exit_price": pe_exit_price,
-        "message": f"Strategy stopped. Total P&L: ₹{round(total_pnl, 2)}"
+        "message": f"Strategy stopped {'(LIVE)' if is_live else '(PAPER)'}. Total P&L: ₹{round(total_pnl, 2)}"
     }
 
 @api_router.get("/strategy/state/{session_id}")
@@ -674,19 +792,26 @@ async def get_strategy_state(session_id: str):
     if not state:
         raise HTTPException(status_code=404, detail="Strategy state not found")
     
-    # Calculate real-time P&L
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    config = StrategyConfig(**session.get("config", {}))
+    is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
+    
     if state.get("is_active"):
-        spot_price = get_mock_nifty_spot()
+        if is_live:
+            spot_price = await fetch_live_nifty_spot(session_id) or get_mock_nifty_spot()
+        else:
+            spot_price = get_mock_nifty_spot()
+        
         state["last_spot_price"] = spot_price
         
         positions = await db.positions.find({"session_id": session_id}, {"_id": 0}).to_list(100)
         total_pnl = 0
         
         for pos in positions:
-            if pos.get("position_type") == "CE":
-                current_price = get_mock_option_premium(spot_price, pos.get("strike"), "CE")
+            if is_live:
+                current_price = await fetch_live_option_ltp(session_id, pos.get("symbol")) or get_mock_option_premium(spot_price, pos.get("strike"), pos.get("position_type"))
             else:
-                current_price = get_mock_option_premium(spot_price, pos.get("strike"), "PE")
+                current_price = get_mock_option_premium(spot_price, pos.get("strike"), pos.get("position_type"))
             
             entry = pos.get("entry_price", 0)
             pnl = (entry - current_price) * abs(pos.get("quantity", 0))
@@ -694,6 +819,7 @@ async def get_strategy_state(session_id: str):
         
         state["daily_pnl"] = round(total_pnl, 2)
     
+    state["is_live_data"] = is_live
     return state
 
 # Positions
@@ -702,37 +828,35 @@ async def get_positions(session_id: str):
     """Get current positions"""
     positions = await db.positions.find({"session_id": session_id}, {"_id": 0}).to_list(100)
     
-    # Update current prices
-    spot_price = get_mock_nifty_spot()
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    config = StrategyConfig(**session.get("config", {}))
+    is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
+    
+    if is_live:
+        spot_price = await fetch_live_nifty_spot(session_id) or get_mock_nifty_spot()
+    else:
+        spot_price = get_mock_nifty_spot()
+    
     for pos in positions:
-        if pos.get("position_type") == "CE":
-            pos["current_price"] = get_mock_option_premium(spot_price, pos.get("strike"), "CE")
+        if is_live:
+            pos["current_price"] = await fetch_live_option_ltp(session_id, pos.get("symbol")) or get_mock_option_premium(spot_price, pos.get("strike"), pos.get("position_type"))
         else:
-            pos["current_price"] = get_mock_option_premium(spot_price, pos.get("strike"), "PE")
+            pos["current_price"] = get_mock_option_premium(spot_price, pos.get("strike"), pos.get("position_type"))
         
         entry = pos.get("entry_price", 0)
         pos["pnl"] = round((entry - pos["current_price"]) * abs(pos.get("quantity", 0)), 2)
     
-    return {"positions": positions, "spot_price": spot_price}
+    return {"positions": positions, "spot_price": spot_price, "is_live_data": is_live}
 
 # Trades
 @api_router.get("/trades/{session_id}")
-async def get_trades(
-    session_id: str,
-    limit: int = Query(default=50, le=500),
-    skip: int = Query(default=0)
-):
+async def get_trades(session_id: str, limit: int = Query(default=50, le=500), skip: int = Query(default=0)):
     """Get trade history"""
-    trades = await db.trades.find(
-        {"session_id": session_id},
-        {"_id": 0}
-    ).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
-    
+    trades = await db.trades.find({"session_id": session_id}, {"_id": 0}).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
     total_count = await db.trades.count_documents({"session_id": session_id})
-    
     return {"trades": trades, "total": total_count}
 
-# Summary Stats
+# Stats
 @api_router.get("/stats/{session_id}")
 async def get_stats(session_id: str):
     """Get trading statistics"""
