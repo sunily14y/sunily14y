@@ -291,6 +291,27 @@ async def get_live_option_price(symbol: str, strike: int, option_type: str, spot
         return live_price, True
     return get_mock_option_premium(spot_price, strike, option_type), False
 
+async def place_live_order(session_id: str, symbol: str, transaction_type: str, quantity: int, order_type: str = "MARKET") -> Optional[str]:
+    """Place live order on Zerodha"""
+    try:
+        k = await get_session_kite(session_id)
+        if k:
+            order_id = k.place_order(
+                tradingsymbol=symbol,
+                exchange="NFO",
+                transaction_type=transaction_type,
+                quantity=quantity,
+                order_type=order_type,
+                product="MIS",  # Intraday
+                variety="regular"
+            )
+            logger.info(f"Order placed: {order_id} for {symbol}")
+            return str(order_id)
+    except Exception as e:
+        logger.error(f"Error placing order for {symbol}: {e}")
+        raise HTTPException(status_code=400, detail=f"Order failed: {str(e)}")
+    return None
+
 # ====================== TRADING ENGINE ======================
 class TradingEngine:
     def __init__(self):
