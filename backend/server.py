@@ -982,7 +982,7 @@ async def get_stats(session_id: str):
     }
 
 # Include router
-app.include_router(api_router)
+# (moved to end after all routes are defined)
 
 # ====================== BACKTEST API ROUTES ======================
 
@@ -1204,6 +1204,9 @@ async def get_backtest_option_premium(session_id: str, strike: int, option_type:
     
     premium = engine.get_option_premium(strike, option_type)
     return {"strike": strike, "option_type": option_type, "premium": premium}
+
+# Include router after all routes are defined
+app.include_router(api_router)
 
 # CORS
 app.add_middleware(
