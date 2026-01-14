@@ -1,0 +1,140 @@
+{
+  "identity": {
+    "name": "NiftyAlgo Terminal",
+    "persona": "E1 - The Anti-AI Designer",
+    "tone": "Professional, High-Frequency, Precision, Dark-Mode First",
+    "archetype": "The Control Room (Mode B)"
+  },
+  "typography": {
+    "primary_font": "Manrope",
+    "secondary_font": "JetBrains Mono",
+    "usage": {
+      "headings": "Manrope, font-bold, tracking-tight",
+      "body": "Manrope, font-medium",
+      "data_numbers": "JetBrains Mono, font-medium, tracking-wide",
+      "code": "JetBrains Mono"
+    },
+    "scale": {
+      "h1": "text-3xl md:text-4xl font-bold tracking-tight",
+      "h2": "text-2xl font-semibold tracking-tight",
+      "h3": "text-xl font-semibold",
+      "pnl_large": "text-4xl font-mono font-bold tracking-tighter",
+      "label": "text-xs font-medium text-muted-foreground uppercase tracking-wider"
+    }
+  },
+  "colors": {
+    "palette_name": "Midnight Terminal",
+    "mode": "dark",
+    "base": {
+      "background": "#09090b",
+      "foreground": "#fafafa",
+      "card": "#18181b",
+      "card_foreground": "#fafafa",
+      "popover": "#09090b",
+      "popover_foreground": "#fafafa",
+      "primary": "#2563eb",
+      "primary_foreground": "#fafafa",
+      "secondary": "#27272a",
+      "secondary_foreground": "#fafafa",
+      "muted": "#27272a",
+      "muted_foreground": "#a1a1aa",
+      "accent": "#27272a",
+      "accent_foreground": "#fafafa",
+      "destructive": "#ef4444",
+      "destructive_foreground": "#fafafa",
+      "border": "#27272a",
+      "input": "#27272a",
+      "ring": "#1d4ed8"
+    },
+    "trading_specific": {
+      "profit": "#10b981",
+      "loss": "#ef4444",
+      "call_option": "#3b82f6",
+      "put_option": "#f59e0b",
+      "neutral": "#71717a"
+    },
+    "gradients": {
+      "profit_glow": "from-emerald-500/20 to-transparent",
+      "loss_glow": "from-rose-500/20 to-transparent",
+      "active_border": "linear-gradient(90deg, #2563eb, #06b6d4)"
+    }
+  },
+  "layout_strategy": {
+    "grid_system": "The Control Room Grid (Mode B)",
+    "container_padding": "p-4 md:p-6 lg:p-8",
+    "gap_size": "gap-4",
+    "border_radius": "rounded-none md:rounded-sm",
+    "density": "high",
+    "structure": {
+      "sidebar": "w-64 fixed h-full border-r border-border bg-card/50 backdrop-blur-xl z-50 hidden md:flex flex-col",
+      "topbar": "h-14 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-40 flex items-center px-6 justify-between",
+      "main_content": "md:pl-64 min-h-screen bg-background",
+      "dashboard_grid": "grid grid-cols-1 md:grid-cols-12 gap-4 p-4"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20 rounded-sm font-medium transition-all active:scale-95",
+      "secondary": "bg-secondary hover:bg-secondary/80 text-secondary-foreground rounded-sm font-medium",
+      "destructive": "bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 rounded-sm",
+      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-sm"
+    },
+    "cards": {
+      "base": "bg-card border border-border rounded-sm shadow-sm",
+      "interactive": "bg-card border border-border rounded-sm hover:border-primary/50 transition-colors cursor-pointer",
+      "glass": "bg-black/40 backdrop-blur-md border border-white/10 rounded-sm"
+    },
+    "inputs": {
+      "base": "bg-input/50 border-input focus:ring-1 focus:ring-primary rounded-sm font-mono text-sm"
+    },
+    "badges": {
+      "live": "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 animate-pulse",
+      "paper": "bg-amber-500/10 text-amber-500 border-amber-500/20",
+      "neutral": "bg-secondary text-secondary-foreground"
+    }
+  },
+  "visual_enhancers": {
+    "glassmorphism": "backdrop-blur-xl bg-black/50 border border-white/5",
+    "neon_borders": "border-b border-primary/50 shadow-[0_1px_10px_rgba(37,99,235,0.2)]",
+    "grid_background": "bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px]",
+    "noise_texture": "opacity-[0.03] pointer-events-none fixed inset-0 z-[100] bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"
+  },
+  "assets": {
+    "icons": "lucide-react",
+    "logo_placeholder": "NiftyAlgo",
+    "images": {
+      "login_background": {
+        "url": "https://images.unsplash.com/photo-1526289034009-0240ddb68ce3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGRpZ2l0YWwlMjBmaW5hbmNlJTIwYmFja2dyb3VuZCUyMGRhcmt8ZW58MHx8fHwxNzY4NDE2Mjg3fDA&ixlib=rb-4.1.0&q=85",
+        "alt": "Abstract Digital Finance Background",
+        "usage": "Login page background with heavy overlay"
+      }
+    }
+  },
+  "motion": {
+    "transitions": "transition-all duration-200 ease-out",
+    "hover_lift": "hover:-translate-y-0.5 hover:shadow-lg",
+    "page_enter": "animate-in fade-in slide-in-from-bottom-4 duration-500",
+    "number_ticker": "tabular-nums transition-colors duration-300"
+  },
+  "accessibility": {
+    "contrast_check": "Ensure all text is at least 4.5:1 contrast against background",
+    "focus_states": "focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "reduced_motion": "respect prefers-reduced-motion"
+  },
+  "instructions_to_main_agent": [
+    "1. SETUP: Install 'lucide-react' and 'recharts' immediately.",
+    "2. THEME: Force dark mode in 'tailwind.config.js' and 'index.css'. Do not allow light mode toggle for this specific app (as per 'professional terminal' requirement).",
+    "3. LAYOUT: Create a 'DashboardLayout' component that includes the Sidebar and Topbar. Wrap all protected routes in this.",
+    "4. COMPONENTS: Use Shadcn UI for all interactive elements but override the rounded corners to be 'rounded-sm' or 'rounded-none' for that sharp financial look.",
+    "5. DATA: Use 'JetBrains Mono' for all pricing, P&L, and numerical data. This is non-negotiable for a trading app.",
+    "6. CHARTS: Use Recharts for the NIFTY spot chart. Style it minimally: hide grid lines or make them very subtle (#333), use a single neon line for price.",
+    "7. STATE: Use 'data-testid' on all buttons and inputs.",
+    "8. LOGIN: Use the provided Unsplash image for the login background with a 'bg-black/80' overlay to ensure text readability."
+  ],
+  "universal_guidelines": [
+    "Do not use gradients for backgrounds, use solid dark colors.",
+    "Use 'sonner' for notifications.",
+    "Always use 'rounded-sm' for a technical feel, avoid 'rounded-xl' or 'rounded-2xl'.",
+    "Input fields should look like terminal inputs: dark background, monospace font."
+  ]
+}
