@@ -470,25 +470,35 @@ async def get_login_url(session_id: str):
     """Get Zerodha login URL"""
     if ZERODHA_API_KEY:
         login_url = kite.login_url()
-        # Store session_id for callback
-        await db.sessions.update_one(
-            {"id": session_id},
-            {"$set": {"pending_auth": True}}
+        # Store session_id in database for callback lookup
+        await db.pending_auth.update_one(
+            {"session_id": session_id},
+            {"$set": {"session_id": session_id, "created_at": datetime.now(timezone.utc).isoformat()}},
+            upsert=True
         )
+        # Use state parameter to pass session_id
         return {"login_url": f"{login_url}&state={session_id}", "is_mock": False}
     else:
         return {"login_url": f"/callback?request_token=mock_token&session_id={session_id}", "is_mock": True}
 
 @api_router.get("/auth/callback")
-async def auth_callback(request_token: str, session_id: str = None, state: str = None):
+async def auth_callback(request_token: str, status: str = None, state: str = None, session_id: str = None):
     """Handle Zerodha OAuth callback"""
-    sid = session_id or state
+    # Get session_id from state parameter or query parameter
+    sid = state or session_id
+    
+    # If no session_id, try to get the most recent pending auth
+    if not sid:
+        pending = await db.pending_auth.find_one({}, sort=[("created_at", -1)])
+        if pending:
+            sid = pending.get("session_id")
     
     if not sid:
-        raise HTTPException(status_code=400, detail="Session ID required")
+        # Redirect to frontend with error
+        return RedirectResponse(url="https://dynastrangle-algo.preview.emergentagent.com/login?error=no_session")
     
     try:
-        if ZERODHA_API_KEY and ZERODHA_API_SECRET and request_token != "mock_token":
+        if ZERODHA_API_KEY and ZERODHA_API_SECRET and request_token and request_token != "mock_token":
             # Real Zerodha authentication
             data = kite.generate_session(request_token, api_secret=ZERODHA_API_SECRET)
             
@@ -500,14 +510,16 @@ async def auth_callback(request_token: str, session_id: str = None, state: str =
                     "access_token": data.get("access_token"),
                     "public_token": data.get("public_token"),
                     "login_time": datetime.now(timezone.utc).isoformat(),
-                    "pending_auth": False
                 }}
             )
             
+            # Clean up pending auth
+            await db.pending_auth.delete_one({"session_id": sid})
+            
             logger.info(f"Zerodha authentication successful for user {data.get('user_id')}")
             
-            # Redirect to frontend dashboard
-            return RedirectResponse(url="https://dynastrangle-algo.preview.emergentagent.com/dashboard?auth=success")
+            # Redirect to frontend dashboard with session
+            return RedirectResponse(url=f"https://dynastrangle-algo.preview.emergentagent.com/dashboard?auth=success&session_id={sid}")
         else:
             # Mock authentication for paper trading
             await db.sessions.update_one(
@@ -518,11 +530,11 @@ async def auth_callback(request_token: str, session_id: str = None, state: str =
                     "login_time": datetime.now(timezone.utc).isoformat()
                 }}
             )
-            return {"success": True, "message": "Paper trading authenticated"}
+            return RedirectResponse(url=f"https://dynastrangle-algo.preview.emergentagent.com/dashboard?auth=success&session_id={sid}")
             
     except Exception as e:
         logger.error(f"Authentication failed: {str(e)}")
-        raise HTTPException(status_code=400, detail=f"Authentication failed: {str(e)}")
+        return RedirectResponse(url=f"https://dynastrangle-algo.preview.emergentagent.com/login?error={str(e)}")
 
 @api_router.post("/auth/callback")
 async def auth_callback_post(session_id: str, request_token: str = "mock_token"):
