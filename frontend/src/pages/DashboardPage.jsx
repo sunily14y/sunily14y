@@ -3,6 +3,7 @@ import { useTradingStore } from "../store/tradingStore";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
+import { Switch } from "../components/ui/switch";
 import { cn } from "../lib/utils";
 import { 
   Play, 
@@ -14,7 +15,8 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Zap,
-  Settings
+  Settings,
+  AlertTriangle
 } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { toast } from "sonner";
@@ -36,7 +38,8 @@ const DashboardPage = () => {
     fetchTrades,
     fetchStats,
     startStrategy,
-    stopStrategy
+    stopStrategy,
+    updateConfig
   } = useTradingStore();
 
   const [isStarting, setIsStarting] = useState(false);
@@ -78,6 +81,16 @@ const DashboardPage = () => {
     }
   };
 
+  const handleModeToggle = async (isLive) => {
+    const newMode = isLive ? 'live' : 'paper';
+    try {
+      await updateConfig({ ...config, trading_mode: newMode });
+      toast.success(`Switched to ${newMode.toUpperCase()} trading mode`);
+    } catch (error) {
+      toast.error("Failed to switch mode");
+    }
+  };
+
   const totalPnL = positions.reduce((sum, pos) => sum + (pos.pnl || 0), 0);
   const isProfitable = totalPnL >= 0;
 
@@ -98,7 +111,24 @@ const DashboardPage = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
+          {/* Trading Mode Toggle */}
+          <div className="flex items-center gap-2 p-2 bg-card border border-border rounded-sm">
+            <span className={cn("text-xs font-medium", config.trading_mode === 'paper' ? "text-amber-500" : "text-muted-foreground")}>
+              Paper
+            </span>
+            <Switch
+              data-testid="mode-toggle"
+              checked={config.trading_mode === 'live'}
+              onCheckedChange={handleModeToggle}
+              disabled={strategyState.is_active}
+              className="data-[state=checked]:bg-emerald-600"
+            />
+            <span className={cn("text-xs font-medium", config.trading_mode === 'live' ? "text-emerald-500" : "text-muted-foreground")}>
+              Live
+            </span>
+          </div>
+
           {!strategyState.is_active ? (
             <Button
               data-testid="start-strategy-btn"
@@ -133,6 +163,19 @@ const DashboardPage = () => {
           )}
         </div>
       </div>
+
+      {/* Live Mode Warning */}
+      {config.trading_mode === 'live' && !strategyState.is_active && (
+        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-sm">
+          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0" />
+          <div>
+            <p className="font-medium text-red-500">Live Trading Mode Active</p>
+            <p className="text-sm text-muted-foreground">
+              Real orders will be placed on NSE/NFO. Real money will be used. Make sure you understand the risks.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Key Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
