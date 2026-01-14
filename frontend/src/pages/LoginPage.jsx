@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useTradingStore } from "../store/tradingStore";
 import { Button } from "../components/ui/button";
 import { TrendingUp, Shield, Zap, BarChart3 } from "lucide-react";
+import axios from "axios";
+
+const API_URL = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -16,6 +19,32 @@ const LoginPage = () => {
       navigate('/dashboard');
     } catch (error) {
       console.error('Failed to create session:', error);
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleZerodhaLogin = async () => {
+    setIsCreating(true);
+    try {
+      // First create a session
+      const sessionId = await createSession();
+      
+      // Then get Zerodha login URL
+      const response = await axios.get(`${API_URL}/auth/login-url`, {
+        params: { session_id: sessionId }
+      });
+      
+      if (response.data.login_url && !response.data.is_mock) {
+        // Redirect to Zerodha login
+        window.location.href = response.data.login_url;
+      } else {
+        // Fallback to paper trading
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      console.error('Failed to initiate Zerodha login:', error);
+      navigate('/dashboard');
     } finally {
       setIsCreating(false);
     }
@@ -142,10 +171,11 @@ const LoginPage = () => {
                   data-testid="zerodha-login-btn"
                   variant="outline"
                   className="w-full h-12 rounded-sm"
-                  disabled
+                  onClick={handleZerodhaLogin}
                 >
                   <span className="flex items-center gap-2">
-                    Connect Zerodha (Coming Soon)
+                    <Zap className="w-4 h-4" />
+                    Connect Zerodha for Live Trading
                   </span>
                 </Button>
               </div>
