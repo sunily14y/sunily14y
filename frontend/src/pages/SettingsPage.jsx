@@ -314,7 +314,7 @@ const SettingsPage = () => {
               <p className="text-sm text-muted-foreground">
                 {localConfig.trading_mode === 'paper' 
                   ? "Simulated trading - no real money at risk"
-                  : "Real trading with Zerodha - requires authentication"
+                  : "Real trading with Zerodha - orders will be placed on exchange"
                 }
               </p>
             </div>
@@ -322,13 +322,21 @@ const SettingsPage = () => {
               data-testid="trading-mode-switch"
               checked={localConfig.trading_mode === 'live'}
               onCheckedChange={(checked) => handleChange('trading_mode', checked ? 'live' : 'paper')}
-              disabled={isStrategyActive || true} // Disabled for now - live trading coming soon
+              disabled={isStrategyActive}
             />
           </div>
           
-          <p className="text-xs text-muted-foreground mt-3">
-            Live trading requires Zerodha Kite Connect authentication. Coming soon.
-          </p>
+          {localConfig.trading_mode === 'live' && (
+            <div className="flex items-center gap-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-sm">
+              <Zap className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+              <div>
+                <p className="font-medium text-emerald-500 text-sm">Live Trading Enabled</p>
+                <p className="text-xs text-muted-foreground">
+                  Real orders will be placed on Zerodha. Make sure you have logged in with Zerodha.
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
