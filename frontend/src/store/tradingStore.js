@@ -57,6 +57,7 @@ export const useTradingStore = create((set, get) => ({
   isLoading: false,
   error: null,
   notifications: [],
+  isLiveData: false,
   
   // Actions
   setError: (error) => set({ error }),
@@ -142,7 +143,10 @@ export const useTradingStore = create((set, get) => ({
       const response = await axios.get(`${API_URL}/market/spot`, {
         params: { session_id: sessionId }
       });
-      set({ spotPrice: response.data.spot_price });
+      set({ 
+        spotPrice: response.data.spot_price,
+        isLiveData: response.data.is_live || false
+      });
       return response.data;
     } catch (error) {
       console.error('Failed to fetch spot price:', error);
@@ -155,7 +159,10 @@ export const useTradingStore = create((set, get) => ({
       const response = await axios.get(`${API_URL}/market/spot-history`, {
         params: { minutes, session_id: sessionId }
       });
-      set({ spotHistory: response.data.history });
+      set({ 
+        spotHistory: response.data.history,
+        isLiveData: response.data.is_live || false
+      });
     } catch (error) {
       console.error('Failed to fetch spot history:', error);
     }
@@ -170,7 +177,8 @@ export const useTradingStore = create((set, get) => ({
       set({
         optionsChain: response.data.chain,
         atmStrike: response.data.atm_strike,
-        spotPrice: response.data.spot_price
+        spotPrice: response.data.spot_price,
+        isLiveData: response.data.is_live || false
       });
     } catch (error) {
       console.error('Failed to fetch options chain:', error);
