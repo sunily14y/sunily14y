@@ -565,26 +565,38 @@ async def get_nifty_spot(session_id: str = None):
     if session_id:
         spot_price = await fetch_live_nifty_spot(session_id)
         is_live = spot_price is not None
+        
+        # Store in history for charting
+        if is_live and spot_price:
+            await db.spot_history.insert_one({
+                "session_id": session_id,
+                "price": spot_price,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "is_live": True
+            })
     
     if not spot_price:
         spot_price = get_mock_nifty_spot()
     
-    return MarketData(
-        spot_price=spot_price,
-        timestamp=datetime.now(timezone.utc),
-        high=spot_price + random.uniform(50, 150),
-        low=spot_price - random.uniform(50, 150),
-        open=spot_price + random.uniform(-100, 100),
-        close=spot_price
-    )
+    return {
+        "spot_price": spot_price,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "high": spot_price + random.uniform(50, 150),
+        "low": spot_price - random.uniform(50, 150),
+        "open": spot_price + random.uniform(-100, 100),
+        "close": spot_price,
+        "is_live": is_live
+    }
 
 @api_router.get("/market/options-chain")
 async def get_options_chain(session_id: str = None):
     """Get NIFTY options chain"""
     spot_price = None
+    is_live = False
     
     if session_id:
         spot_price = await fetch_live_nifty_spot(session_id)
+        is_live = spot_price is not None
     
     if not spot_price:
         spot_price = get_mock_nifty_spot()
@@ -596,14 +608,29 @@ async def get_options_chain(session_id: str = None):
         "spot_price": spot_price,
         "atm_strike": atm_strike,
         "chain": [item.model_dump() for item in chain],
-        "timestamp": datetime.now(timezone.utc).isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "is_live": is_live
     }
 
 @api_router.get("/market/spot-history")
-async def get_spot_history(minutes: int = 60):
+async def get_spot_history(minutes: int = 60, session_id: str = None):
     """Get historical spot prices for charting"""
-    base_price = get_mock_nifty_spot()
     history = []
+    
+    # Try to get live history from database
+    if session_id:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        live_history = await db.spot_history.find(
+            {"session_id": session_id, "timestamp": {"$gte": cutoff.isoformat()}},
+            {"_id": 0}
+        ).sort("timestamp", 1).to_list(500)
+        
+        if live_history and len(live_history) > 5:
+            history = [{"timestamp": h["timestamp"], "price": h["price"]} for h in live_history]
+            return {"history": history, "is_live": True}
+    
+    # Fallback to mock data
+    base_price = get_mock_nifty_spot()
     now = datetime.now(timezone.utc)
     
     for i in range(minutes, 0, -1):
@@ -615,7 +642,7 @@ async def get_spot_history(minutes: int = 60):
             "price": round(price, 2)
         })
     
-    return {"history": history}
+    return {"history": history, "is_live": False}
 
 # Strategy Management
 @api_router.post("/strategy/start")
