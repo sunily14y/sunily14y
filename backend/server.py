@@ -44,7 +44,7 @@ db = client[os.environ['DB_NAME']]
 # Zerodha Config
 ZERODHA_API_KEY = os.environ.get('ZERODHA_API_KEY', '')
 ZERODHA_API_SECRET = os.environ.get('ZERODHA_API_SECRET', '')
-ZERODHA_REDIRECT_URL = os.environ.get('ZERODHA_REDIRECT_URL', 'https://dynastrangle-algo.preview.emergentagent.com/api/auth/callback')
+ZERODHA_REDIRECT_URL = os.environ.get('ZERODHA_REDIRECT_URL', 'https://zerotrades.preview.emergentagent.com/api/auth/callback')
 
 app = FastAPI(title="NiftyAlgo Trading System")
 api_router = APIRouter(prefix="/api")
@@ -560,7 +560,7 @@ async def auth_callback(request_token: str, status: str = None, state: str = Non
     
     if not sid:
         # Redirect to frontend with error
-        return RedirectResponse(url="https://dynastrangle-algo.preview.emergentagent.com/login?error=no_session")
+        return RedirectResponse(url="https://zerotrades.preview.emergentagent.com/login?error=no_session")
     
     try:
         if ZERODHA_API_KEY and ZERODHA_API_SECRET and request_token and request_token != "mock_token":
@@ -590,7 +590,7 @@ async def auth_callback(request_token: str, status: str = None, state: str = Non
             logger.info(f"Zerodha authentication successful for user {data.get('user_id')} - Live mode enabled")
             
             # Redirect to frontend dashboard with session
-            return RedirectResponse(url=f"https://dynastrangle-algo.preview.emergentagent.com/dashboard?auth=success&session_id={sid}&mode=live")
+            return RedirectResponse(url=f"https://zerotrades.preview.emergentagent.com/dashboard?auth=success&session_id={sid}&mode=live")
         else:
             # Mock authentication for paper trading
             await db.sessions.update_one(
@@ -601,11 +601,11 @@ async def auth_callback(request_token: str, status: str = None, state: str = Non
                     "login_time": datetime.now(timezone.utc).isoformat()
                 }}
             )
-            return RedirectResponse(url=f"https://dynastrangle-algo.preview.emergentagent.com/dashboard?auth=success&session_id={sid}")
+            return RedirectResponse(url=f"https://zerotrades.preview.emergentagent.com/dashboard?auth=success&session_id={sid}")
             
     except Exception as e:
         logger.error(f"Authentication failed: {str(e)}")
-        return RedirectResponse(url=f"https://dynastrangle-algo.preview.emergentagent.com/login?error={str(e)}")
+        return RedirectResponse(url=f"https://zerotrades.preview.emergentagent.com/login?error={str(e)}")
 
 @api_router.post("/auth/callback")
 async def auth_callback_post(session_id: str, request_token: str = "mock_token"):

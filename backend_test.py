@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 class NiftyAlgoAPITester:
-    def __init__(self, base_url: str = "https://dynastrangle-algo.preview.emergentagent.com"):
+    def __init__(self, base_url: str = "https://zerotrades.preview.emergentagent.com"):
         self.base_url = base_url
         self.session_id: Optional[str] = None
         self.tests_run = 0
