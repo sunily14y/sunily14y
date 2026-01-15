@@ -678,7 +678,7 @@ async def get_auth_status():
 # Strategy Management
 @api_router.post("/strategy/start")
 async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
-    """Start the trading strategy"""
+    """Start the trading strategy - LIVE DATA ONLY"""
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -686,13 +686,16 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
     config = StrategyConfig(**session.get("config", {}))
     is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
     
-    # Get current spot price
-    if is_live:
-        spot_price = await fetch_live_nifty_spot(session_id)
-        if not spot_price:
-            spot_price = get_mock_nifty_spot()
-    else:
-        spot_price = get_mock_nifty_spot()
+    # Get current spot price - LIVE DATA ONLY
+    spot_price = await fetch_live_nifty_spot(session_id)
+    if not spot_price:
+        spot_price = await fetch_live_nifty_spot_any_session()
+    
+    if not spot_price:
+        raise HTTPException(
+            status_code=503, 
+            detail="Disconnected - No live data available. Please login with Zerodha first."
+        )
     
     atm_strike = round(spot_price / 50) * 50
     ce_strike = atm_strike + config.strike_distance
@@ -704,13 +707,20 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
     ce_symbol = format_nifty_option_symbol(ce_strike, "CE", expiry)
     pe_symbol = format_nifty_option_symbol(pe_strike, "PE", expiry)
     
-    # Get option premiums
-    if is_live:
-        ce_price = await fetch_live_option_ltp(session_id, ce_symbol) or get_mock_option_premium(spot_price, ce_strike, "CE")
-        pe_price = await fetch_live_option_ltp(session_id, pe_symbol) or get_mock_option_premium(spot_price, pe_strike, "PE")
-    else:
-        ce_price = get_mock_option_premium(spot_price, ce_strike, "CE")
-        pe_price = get_mock_option_premium(spot_price, pe_strike, "PE")
+    # Get option premiums - LIVE DATA ONLY
+    ce_price = await fetch_live_option_ltp(session_id, ce_symbol)
+    pe_price = await fetch_live_option_ltp(session_id, pe_symbol)
+    
+    if not ce_price:
+        ce_price = await fetch_live_option_ltp_any_session(ce_symbol)
+    if not pe_price:
+        pe_price = await fetch_live_option_ltp_any_session(pe_symbol)
+    
+    if not ce_price or not pe_price:
+        raise HTTPException(
+            status_code=503,
+            detail="Disconnected - Cannot fetch option prices. Please login with Zerodha."
+        )
     
     # Place orders
     order_ids = {"ce": None, "pe": None}
