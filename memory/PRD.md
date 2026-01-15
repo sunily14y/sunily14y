@@ -20,6 +20,14 @@ Build an AUTOMATED OPTION SELLING ALGO for NIFTY 50 using Zerodha Kite API suppo
 
 ## What's Been Implemented
 
+### Jan 15, 2026 - Backtest Configuration Options (Complete)
+- [x] **Custom Lot Size**: Slider to set 1-10 lots (each lot = 25 qty)
+- [x] **Custom Strike Distance**: Slider 50-500 points from ATM
+- [x] **Custom Adjustment Zone**: Slider 25-100 points trigger zone
+- [x] **Max Daily Loss**: Input field for loss limit with auto-exit feature
+- [x] Config passed to backend and used in backtest engine
+- [x] Max loss exit triggers automatic position closure
+
 ### Jan 15, 2026 - Enhanced Backtesting (Complete)
 - [x] **P&L Tracking**: Realized and unrealized P&L calculation during backtest
 - [x] **Trade History**: Complete log of all entry/exit trades with premiums
