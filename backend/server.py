@@ -309,7 +309,7 @@ class TradingEngine:
         return False
     
     async def _run_strategy_loop(self, session_id: str):
-        """Main strategy execution loop"""
+        """Main strategy execution loop - LIVE DATA ONLY"""
         try:
             while True:
                 session_data = await db.sessions.find_one({"id": session_id}, {"_id": 0})
@@ -323,17 +323,20 @@ class TradingEngine:
                 config = StrategyConfig(**session_data.get("config", {}))
                 state = StrategyState(**state_data)
                 
-                # Get current spot price (live or mock)
-                is_live = config.trading_mode == TradingMode.LIVE and session_data.get("access_token")
+                # Always fetch live data from Zerodha
+                spot_price = await fetch_live_nifty_spot(session_id)
+                if not spot_price:
+                    # Try any authenticated session
+                    spot_price = await fetch_live_nifty_spot_any_session()
                 
-                if is_live:
-                    spot_price = await fetch_live_nifty_spot(session_id)
-                    if not spot_price:
-                        spot_price = get_mock_nifty_spot()
-                else:
-                    spot_price = get_mock_nifty_spot()
+                if not spot_price:
+                    # No live data available - log and continue waiting
+                    logger.warning(f"No live data available for session {session_id}")
+                    await asyncio.sleep(5)  # Wait longer when disconnected
+                    continue
                 
                 state.last_spot_price = spot_price
+                is_live = config.trading_mode == TradingMode.LIVE and session_data.get("access_token")
                 
                 # Check adjustment conditions
                 if state.ce_strike and state.pe_strike:
@@ -367,7 +370,7 @@ class TradingEngine:
             await self._shift_strangle(session_id, config, state, spot_price, "DOWN", is_live)
     
     async def _shift_strangle(self, session_id: str, config: StrategyConfig, state: StrategyState, spot_price: float, direction: str, is_live: bool):
-        """Shift both legs of the strangle"""
+        """Shift both legs of the strangle - LIVE DATA ONLY"""
         shift_amount = 50
         expiry = get_nifty_weekly_expiry()
         
@@ -382,23 +385,36 @@ class TradingEngine:
         
         lot_size = config.lot_size * 25
         
-        # Get prices
-        if is_live:
-            ce_exit_price = await fetch_live_option_ltp(session_id, state.ce_symbol) or get_mock_option_premium(spot_price, state.ce_strike, "CE")
-            pe_exit_price = await fetch_live_option_ltp(session_id, state.pe_symbol) or get_mock_option_premium(spot_price, state.pe_strike, "PE")
-        else:
-            ce_exit_price = get_mock_option_premium(spot_price, state.ce_strike, "CE")
-            pe_exit_price = get_mock_option_premium(spot_price, state.pe_strike, "PE")
+        # Get prices - always from live feed
+        ce_exit_price = await fetch_live_option_ltp(session_id, state.ce_symbol)
+        pe_exit_price = await fetch_live_option_ltp(session_id, state.pe_symbol)
+        
+        # If session doesn't have token, try any authenticated session
+        if not ce_exit_price:
+            ce_exit_price = await fetch_live_option_ltp_any_session(state.ce_symbol)
+        if not pe_exit_price:
+            pe_exit_price = await fetch_live_option_ltp_any_session(state.pe_symbol)
+        
+        # Cannot proceed without live prices
+        if not ce_exit_price or not pe_exit_price:
+            logger.error(f"Cannot shift strangle - no live prices available")
+            return
         
         new_ce_symbol = format_nifty_option_symbol(new_ce_strike, "CE", expiry)
         new_pe_symbol = format_nifty_option_symbol(new_pe_strike, "PE", expiry)
         
-        if is_live:
-            new_ce_price = await fetch_live_option_ltp(session_id, new_ce_symbol) or get_mock_option_premium(spot_price, new_ce_strike, "CE")
-            new_pe_price = await fetch_live_option_ltp(session_id, new_pe_symbol) or get_mock_option_premium(spot_price, new_pe_strike, "PE")
-        else:
-            new_ce_price = get_mock_option_premium(spot_price, new_ce_strike, "CE")
-            new_pe_price = get_mock_option_premium(spot_price, new_pe_strike, "PE")
+        new_ce_price = await fetch_live_option_ltp(session_id, new_ce_symbol)
+        new_pe_price = await fetch_live_option_ltp(session_id, new_pe_symbol)
+        
+        if not new_ce_price:
+            new_ce_price = await fetch_live_option_ltp_any_session(new_ce_symbol)
+        if not new_pe_price:
+            new_pe_price = await fetch_live_option_ltp_any_session(new_pe_symbol)
+        
+        # Cannot proceed without new strike prices
+        if not new_ce_price or not new_pe_price:
+            logger.error(f"Cannot shift strangle - no live prices for new strikes")
+            return
         
         # Place orders (live mode)
         order_ids = {"ce_exit": None, "pe_exit": None, "ce_entry": None, "pe_entry": None}
