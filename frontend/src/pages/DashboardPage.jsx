@@ -185,19 +185,23 @@ const DashboardPage = () => {
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-muted-foreground uppercase tracking-wider">NIFTY 50</span>
-                {isLiveData && (
+                {isLiveData ? (
                   <Badge className="text-[10px] bg-emerald-500/20 text-emerald-500 border-emerald-500/30 animate-pulse">
                     LIVE
                   </Badge>
+                ) : (
+                  <Badge className="text-[10px] bg-red-500/20 text-red-500 border-red-500/30">
+                    DISCONNECTED
+                  </Badge>
                 )}
               </div>
-              <Activity className={cn("w-4 h-4", isLiveData ? "text-emerald-500" : "text-amber-500")} />
+              <Activity className={cn("w-4 h-4", isLiveData ? "text-emerald-500" : "text-red-500")} />
             </div>
             <div className="font-mono text-2xl font-bold tracking-tight">
-              {spotPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+              {spotPrice > 0 ? spotPrice.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : '---'}
             </div>
             {!isLiveData && (
-              <p className="text-[10px] text-amber-500 mt-1">Simulated data</p>
+              <p className="text-[10px] text-red-500 mt-1">No live data - Login with Zerodha</p>
             )}
           </CardContent>
         </Card>
