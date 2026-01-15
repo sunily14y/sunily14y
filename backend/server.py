@@ -1292,7 +1292,7 @@ async def search_instruments(query: str):
                         })
                         if len(results) >= 50:  # Limit results
                             break
-            except:
+            except Exception:
                 pass
             
             if len(results) >= 50:
