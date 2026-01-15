@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Progress } from "../components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { ScrollArea } from "../components/ui/scroll-area";
+import { Slider } from "../components/ui/slider";
 import { cn } from "../lib/utils";
 import { 
   Play, 
@@ -18,7 +19,6 @@ import {
   SkipForward,
   Clock,
   TrendingUp,
-  TrendingDown,
   Activity,
   Zap,
   Download,
@@ -29,8 +29,11 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   History,
-  DollarSign,
-  ListOrdered
+  ListOrdered,
+  Settings,
+  Target,
+  Shield,
+  AlertTriangle
 } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
@@ -39,7 +42,7 @@ import { format } from "date-fns";
 const API_URL = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const BacktestPage = () => {
-  const { sessionId, config } = useTradingStore();
+  const { sessionId } = useTradingStore();
   
   // Backtest state
   const [availableDates, setAvailableDates] = useState([]);
@@ -51,6 +54,14 @@ const BacktestPage = () => {
   const [backtestState, setBacktestState] = useState(null);
   const [strategyActive, setStrategyActive] = useState(false);
   const [dataSource, setDataSource] = useState("");
+  
+  // Strategy Configuration for Backtest
+  const [backtestConfig, setBacktestConfig] = useState({
+    lot_size: 1,
+    strike_distance: 200,
+    adjustment_zone: 50,
+    max_daily_loss: null
+  });
   
   // P&L and History state
   const [pnl, setPnl] = useState({ realized_pnl: 0, unrealized_pnl: 0, total_pnl: 0 });
