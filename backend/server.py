@@ -1030,7 +1030,7 @@ async def get_backtest_dates():
 
 @api_router.post("/backtest/start")
 async def start_backtest(session_id: str, date: str, speed: float = 1.0):
-    """Start a backtest session for a specific date"""
+    """Start a backtest session for a specific date using Zerodha data"""
     import asyncio
     import concurrent.futures
     
@@ -1038,23 +1038,51 @@ async def start_backtest(session_id: str, date: str, speed: float = 1.0):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
-    # Create backtest engine
     config = session.get("config", {})
     engine = create_backtest_engine(session_id, config)
     
-    # Load historical data in thread pool (yfinance is blocking)
-    loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        success = await loop.run_in_executor(pool, engine.load_data, date)
+    # Try Zerodha first
+    data_loaded = False
+    data_source = "yahoo"
     
-    if not success:
-        remove_backtest_engine(session_id)
-        raise HTTPException(status_code=400, detail=f"No data available for {date}")
+    try:
+        auth_session = await db.sessions.find_one(
+            {"access_token": {"$exists": True, "$ne": None}},
+            {"_id": 0, "access_token": 1},
+            sort=[("login_time", -1)]
+        )
+        
+        if auth_session and auth_session.get("access_token"):
+            kite = get_kite_sync(auth_session["access_token"])
+            
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                candles = await loop.run_in_executor(
+                    pool, fetch_zerodha_historical_sync, kite, date, 256265, "5minute"
+                )
+            
+            if candles:
+                engine.data = candles
+                engine.current_index = 0
+                data_loaded = True
+                data_source = "zerodha"
+                logger.info(f"Loaded {len(candles)} candles from Zerodha for {date}")
+    except Exception as e:
+        logger.warning(f"Zerodha data fetch failed: {e}")
+    
+    # Fallback to Yahoo
+    if not data_loaded:
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            success = await loop.run_in_executor(pool, engine.load_data, date)
+        
+        if not success:
+            remove_backtest_engine(session_id)
+            raise HTTPException(status_code=400, detail=f"No data available for {date}")
     
     engine.speed = speed
     engine.is_running = True
     
-    # Update session mode
     config["trading_mode"] = "backtest"
     config["backtest_date"] = date
     config["backtest_speed"] = speed
@@ -1070,7 +1098,8 @@ async def start_backtest(session_id: str, date: str, speed: float = 1.0):
         "date": date,
         "total_candles": len(engine.data),
         "first_timestamp": first_candle["timestamp"] if first_candle else None,
-        "speed": speed
+        "speed": speed,
+        "data_source": data_source
     }
 
 @api_router.post("/backtest/stop")
