@@ -397,7 +397,7 @@ class TradingEngine:
         
         # Cannot proceed without live prices
         if not ce_exit_price or not pe_exit_price:
-            logger.error(f"Cannot shift strangle - no live prices available")
+            logger.error("Cannot shift strangle - no live prices available")
             return
         
         new_ce_symbol = format_nifty_option_symbol(new_ce_strike, "CE", expiry)
@@ -413,7 +413,7 @@ class TradingEngine:
         
         # Cannot proceed without new strike prices
         if not new_ce_price or not new_pe_price:
-            logger.error(f"Cannot shift strangle - no live prices for new strikes")
+            logger.error("Cannot shift strangle - no live prices for new strikes")
             return
         
         # Place orders (live mode)
