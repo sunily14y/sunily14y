@@ -447,6 +447,37 @@ class BacktestEngine:
         if not self.ce_strike or not self.pe_strike:
             return None
         
+        # Check max daily loss first
+        if self.max_daily_loss and self.max_daily_loss > 0:
+            current_pnl = self.get_current_pnl()
+            if current_pnl["total_pnl"] <= -self.max_daily_loss and not self.max_loss_triggered:
+                self.max_loss_triggered = True
+                candle = self.get_current_candle()
+                timestamp = candle["timestamp"] if candle else datetime.now(timezone.utc).isoformat()
+                
+                # Close all positions due to max loss
+                self.close_position(self.ce_strike, "CE", "BUY", False, None)
+                self.close_position(self.pe_strike, "PE", "BUY", False, None)
+                
+                # Record as special adjustment
+                max_loss_event = {
+                    "number": -1,  # Special marker for max loss exit
+                    "timestamp": timestamp,
+                    "direction": "MAX_LOSS_EXIT",
+                    "old_ce_strike": self.ce_strike,
+                    "old_pe_strike": self.pe_strike,
+                    "new_ce_strike": None,
+                    "new_pe_strike": None,
+                    "spot_price": self.get_spot_price(),
+                    "reason": f"Max daily loss of ₹{self.max_daily_loss} breached. P&L: ₹{current_pnl['total_pnl']:.2f}"
+                }
+                self.adjustment_history.append(max_loss_event)
+                
+                self.ce_strike = None
+                self.pe_strike = None
+                
+                return max_loss_event
+        
         spot = self.get_spot_price()
         adjustment_zone = self.config.get("adjustment_zone", 50)
         
