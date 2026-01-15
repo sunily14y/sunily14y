@@ -20,6 +20,13 @@ Build an AUTOMATED OPTION SELLING ALGO for NIFTY 50 using Zerodha Kite API suppo
 
 ## What's Been Implemented
 
+### Jan 15, 2026 - Enhanced Backtesting (Complete)
+- [x] **P&L Tracking**: Realized and unrealized P&L calculation during backtest
+- [x] **Trade History**: Complete log of all entry/exit trades with premiums
+- [x] **Adjustment History**: Detailed log of when/why adjustments occurred
+- [x] New API endpoints: `/backtest/pnl`, `/backtest/trades`, `/backtest/adjustments`, `/backtest/summary`
+- [x] Enhanced frontend UI with trade history and adjustment panels
+
 ### Jan 15, 2026 - Mock Data Removal (Complete)
 - [x] Removed ALL mock data functions from backend:
   - `get_mock_nifty_spot()` - REMOVED
