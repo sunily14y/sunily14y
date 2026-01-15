@@ -313,7 +313,7 @@ const SettingsPage = () => {
               </div>
               <p className="text-sm text-muted-foreground">
                 {localConfig.trading_mode === 'paper' 
-                  ? "Simulated trading - no real money at risk"
+                  ? "Paper trading - uses live data without placing real orders"
                   : "Real trading with Zerodha - orders will be placed on exchange"
                 }
               </p>
