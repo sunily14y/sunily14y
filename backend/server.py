@@ -13,7 +13,6 @@ from datetime import datetime, timezone, timedelta
 import hashlib
 import asyncio
 from enum import Enum
-import random
 from kiteconnect import KiteConnect
 from backtesting import (
     fetch_historical_data,
@@ -189,51 +188,9 @@ def format_nifty_option_symbol(strike: int, option_type: str, expiry: str = None
     # Format: NIFTY25JAN2650CE
     return f"NIFTY{expiry}{strike}{option_type}"
 
-# ====================== MOCK DATA (Fallback) ======================
-
-def get_mock_nifty_spot() -> float:
-    """Generate realistic NIFTY spot price around 26000"""
-    base_price = 26000
-    variation = random.uniform(-200, 200)
-    return round(base_price + variation, 2)
-
-def get_mock_option_premium(spot: float, strike: int, option_type: str) -> float:
-    """Calculate mock option premium based on moneyness"""
-    if option_type == "CE":
-        intrinsic = max(0, spot - strike)
-        time_value = random.uniform(20, 80)
-    else:
-        intrinsic = max(0, strike - spot)
-        time_value = random.uniform(20, 80)
-    premium = intrinsic + time_value + random.uniform(-10, 10)
-    return max(5, round(premium, 2))
-
-def get_mock_options_chain(spot_price: float) -> List[OptionsChainItem]:
-    """Generate mock options chain data"""
-    atm_strike = round(spot_price / 50) * 50
-    chain = []
-    expiry = get_nifty_weekly_expiry()
-    
-    for i in range(-10, 11):
-        strike = atm_strike + (i * 50)
-        ce_ltp = get_mock_option_premium(spot_price, strike, "CE")
-        pe_ltp = get_mock_option_premium(spot_price, strike, "PE")
-        
-        chain.append(OptionsChainItem(
-            strike=strike,
-            ce_ltp=ce_ltp,
-            pe_ltp=pe_ltp,
-            ce_symbol=format_nifty_option_symbol(strike, "CE", expiry),
-            pe_symbol=format_nifty_option_symbol(strike, "PE", expiry),
-            ce_iv=round(random.uniform(10, 25), 2),
-            pe_iv=round(random.uniform(10, 25), 2),
-            ce_oi=random.randint(10000, 500000),
-            pe_oi=random.randint(10000, 500000),
-            ce_volume=random.randint(1000, 50000),
-            pe_volume=random.randint(1000, 50000)
-        ))
-    
-    return chain
+# ====================== LIVE DATA ONLY (No Mock Data) ======================
+# All mock data functions have been removed.
+# The system now relies exclusively on live Zerodha data.
 
 # ====================== LIVE DATA FETCHERS ======================
 
