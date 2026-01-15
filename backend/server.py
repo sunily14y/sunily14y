@@ -1263,6 +1263,127 @@ async def get_backtest_option_premium(session_id: str, strike: int, option_type:
     premium = engine.get_option_premium(strike, option_type)
     return {"strike": strike, "option_type": option_type, "premium": premium}
 
+# ====================== DATA DOWNLOAD API ROUTES ======================
+
+@api_router.get("/data/search-instruments")
+async def search_instruments(query: str):
+    """Search for instruments (stocks, indices, F&O)"""
+    try:
+        # Get Kite instance
+        session = await db.sessions.find_one(
+            {"access_token": {"$exists": True, "$ne": None}},
+            {"_id": 0, "access_token": 1},
+            sort=[("login_time", -1)]
+        )
+        
+        if not session or not session.get("access_token"):
+            raise HTTPException(status_code=401, detail="Please login with Zerodha first")
+        
+        kite = get_kite_sync(session["access_token"])
+        
+        # Search across exchanges
+        results = []
+        for exchange in ["NSE", "NFO", "BSE"]:
+            try:
+                instruments = kite.instruments(exchange)
+                for inst in instruments:
+                    if query.upper() in inst["tradingsymbol"].upper() or query.upper() in str(inst.get("name", "")).upper():
+                        results.append({
+                            "tradingsymbol": inst["tradingsymbol"],
+                            "name": inst.get("name", ""),
+                            "exchange": inst["exchange"],
+                            "instrument_token": inst["instrument_token"],
+                            "instrument_type": inst.get("instrument_type", "EQ"),
+                            "lot_size": inst.get("lot_size", 1)
+                        })
+                        if len(results) >= 50:  # Limit results
+                            break
+            except:
+                pass
+            
+            if len(results) >= 50:
+                break
+        
+        return {"instruments": results[:50]}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/data/historical")
+async def get_historical_data(
+    instrument_token: int,
+    from_date: str,
+    to_date: str,
+    interval: str = "day"
+):
+    """Download historical data for any instrument"""
+    import concurrent.futures
+    
+    try:
+        # Get Kite instance
+        session = await db.sessions.find_one(
+            {"access_token": {"$exists": True, "$ne": None}},
+            {"_id": 0, "access_token": 1},
+            sort=[("login_time", -1)]
+        )
+        
+        if not session or not session.get("access_token"):
+            raise HTTPException(status_code=401, detail="Please login with Zerodha first")
+        
+        kite = get_kite_sync(session["access_token"])
+        
+        # Parse dates
+        from_dt = datetime.strptime(from_date, "%Y-%m-%d")
+        to_dt = datetime.strptime(to_date, "%Y-%m-%d") + timedelta(days=1)
+        
+        # Validate interval
+        valid_intervals = ["minute", "3minute", "5minute", "15minute", "30minute", "60minute", "day"]
+        if interval not in valid_intervals:
+            raise HTTPException(status_code=400, detail=f"Invalid interval. Use: {valid_intervals}")
+        
+        # Fetch data in thread pool
+        def fetch_data():
+            return kite.historical_data(
+                instrument_token=instrument_token,
+                from_date=from_dt,
+                to_date=to_dt,
+                interval=interval
+            )
+        
+        loop = asyncio.get_event_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            data = await loop.run_in_executor(pool, fetch_data)
+        
+        # Format response
+        candles = []
+        for row in data:
+            candles.append({
+                "timestamp": row["date"].isoformat() if hasattr(row["date"], "isoformat") else str(row["date"]),
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": int(row["volume"])
+            })
+        
+        return {
+            "instrument_token": instrument_token,
+            "from_date": from_date,
+            "to_date": to_date,
+            "interval": interval,
+            "count": len(candles),
+            "data": candles
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Historical data error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Include router after all routes are defined
 app.include_router(api_router)
 
