@@ -890,8 +890,7 @@ async def get_strategy_state(session_id: str):
     if not state:
         raise HTTPException(status_code=404, detail="Strategy state not found")
     
-    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
-    config = StrategyConfig(**session.get("config", {}))
+    await db.sessions.find_one({"id": session_id}, {"_id": 0})
     
     # Check if we have live data available
     spot_price = await fetch_live_nifty_spot(session_id)
