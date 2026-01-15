@@ -228,6 +228,14 @@ class BacktestEngine:
         self.adjustment_count: int = 0
         self.start_time: Optional[datetime] = None
         
+        # Enhanced tracking for P&L and history
+        self.trade_history: List[Dict] = []  # All trades with details
+        self.adjustment_history: List[Dict] = []  # Adjustment events
+        self.entry_ce_premium: float = 0.0
+        self.entry_pe_premium: float = 0.0
+        self.realized_pnl: float = 0.0
+        self.lot_size: int = config.get("lot_size", 1) * 25  # NIFTY lot = 25
+        
     def load_data(self, date: str) -> bool:
         """Load historical data for a specific date"""
         self.data = fetch_historical_data(date, interval="5m")
