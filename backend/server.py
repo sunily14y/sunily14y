@@ -1139,36 +1139,24 @@ async def get_backtest_state(session_id: str):
 
 @api_router.post("/backtest/advance")
 async def advance_backtest(session_id: str, steps: int = 1):
-    """Advance backtest by N candles"""
+    """Advance backtest by N candles with adjustment tracking"""
     engine = get_backtest_engine(session_id)
     if not engine:
         raise HTTPException(status_code=400, detail="No active backtest")
     
+    adjustment_info = None
     for _ in range(steps):
         if not engine.advance():
             break
+        
+        # Check for adjustments using the enhanced method
+        adj = engine.check_and_adjust()
+        if adj:
+            adjustment_info = adj
     
     candle = engine.get_current_candle()
     progress = engine.get_progress()
-    
-    # Check for adjustments if strategy is active
-    adjustment_triggered = False
-    if engine.ce_strike and engine.pe_strike and candle:
-        spot = candle["close"]
-        adjustment_zone = engine.config.get("adjustment_zone", 50)
-        
-        if spot >= engine.ce_strike - adjustment_zone:
-            # Shift UP
-            engine.ce_strike += 50
-            engine.pe_strike += 50
-            engine.adjustment_count += 1
-            adjustment_triggered = True
-        elif spot <= engine.pe_strike + adjustment_zone:
-            # Shift DOWN
-            engine.ce_strike -= 50
-            engine.pe_strike -= 50
-            engine.adjustment_count += 1
-            adjustment_triggered = True
+    pnl = engine.get_current_pnl()
     
     return {
         "spot_price": candle["close"] if candle else 0,
@@ -1177,7 +1165,10 @@ async def advance_backtest(session_id: str, steps: int = 1):
         "ce_strike": engine.ce_strike,
         "pe_strike": engine.pe_strike,
         "adjustment_count": engine.adjustment_count,
-        "adjustment_triggered": adjustment_triggered
+        "adjustment_triggered": adjustment_info is not None,
+        "adjustment_info": adjustment_info,
+        "pnl": pnl,
+        "trade_count": len(engine.trade_history)
     }
 
 @api_router.get("/backtest/chart-data")
