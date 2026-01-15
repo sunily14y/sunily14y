@@ -1197,55 +1197,69 @@ async def get_backtest_chart(session_id: str, candles: int = 50):
 
 @api_router.post("/backtest/start-strategy")
 async def start_backtest_strategy(session_id: str):
-    """Start strategy within backtest"""
+    """Start strategy within backtest with full tracking"""
     engine = get_backtest_engine(session_id)
     if not engine:
         raise HTTPException(status_code=400, detail="No active backtest")
     
-    spot = engine.get_spot_price()
-    atm = round(spot / 50) * 50
-    strike_distance = engine.config.get("strike_distance", 200)
-    
-    engine.ce_strike = atm + strike_distance
-    engine.pe_strike = atm - strike_distance
-    engine.adjustment_count = 0
-    
-    ce_premium = engine.get_option_premium(engine.ce_strike, "CE")
-    pe_premium = engine.get_option_premium(engine.pe_strike, "PE")
+    result = engine.start_strategy_with_tracking()
     
     return {
         "success": True,
-        "spot_price": spot,
-        "ce_strike": engine.ce_strike,
-        "pe_strike": engine.pe_strike,
-        "ce_premium": ce_premium,
-        "pe_premium": pe_premium
+        **result
     }
 
 @api_router.post("/backtest/stop-strategy")
 async def stop_backtest_strategy(session_id: str):
-    """Stop strategy within backtest"""
+    """Stop strategy within backtest with P&L summary"""
     engine = get_backtest_engine(session_id)
     if not engine:
         raise HTTPException(status_code=400, detail="No active backtest")
     
-    ce_exit = engine.get_option_premium(engine.ce_strike, "CE") if engine.ce_strike else 0
-    pe_exit = engine.get_option_premium(engine.pe_strike, "PE") if engine.pe_strike else 0
-    
-    result = {
-        "success": True,
-        "ce_strike": engine.ce_strike,
-        "pe_strike": engine.pe_strike,
-        "ce_exit_premium": ce_exit,
-        "pe_exit_premium": pe_exit,
-        "adjustment_count": engine.adjustment_count
-    }
-    
-    engine.ce_strike = None
-    engine.pe_strike = None
-    engine.adjustment_count = 0
-    
+    result = engine.stop_strategy_with_tracking()
     return result
+
+@api_router.get("/backtest/pnl")
+async def get_backtest_pnl(session_id: str):
+    """Get current P&L for backtest"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    return engine.get_current_pnl()
+
+@api_router.get("/backtest/trades")
+async def get_backtest_trades(session_id: str):
+    """Get trade history for backtest"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    return {
+        "trades": engine.trade_history,
+        "total": len(engine.trade_history)
+    }
+
+@api_router.get("/backtest/adjustments")
+async def get_backtest_adjustments(session_id: str):
+    """Get adjustment history for backtest"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    return {
+        "adjustments": engine.adjustment_history,
+        "total": engine.adjustment_count
+    }
+
+@api_router.get("/backtest/summary")
+async def get_backtest_summary(session_id: str):
+    """Get complete backtest summary"""
+    engine = get_backtest_engine(session_id)
+    if not engine:
+        raise HTTPException(status_code=400, detail="No active backtest")
+    
+    return engine.get_summary()
 
 @api_router.get("/backtest/option-premium")
 async def get_backtest_option_premium(session_id: str, strike: int, option_type: str):
