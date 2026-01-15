@@ -885,66 +885,74 @@ async def stop_strategy(session_id: str):
 
 @api_router.get("/strategy/state/{session_id}")
 async def get_strategy_state(session_id: str):
-    """Get current strategy state"""
+    """Get current strategy state - LIVE DATA ONLY"""
     state = await db.strategy_states.find_one({"session_id": session_id}, {"_id": 0})
     if not state:
         raise HTTPException(status_code=404, detail="Strategy state not found")
     
     session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
     config = StrategyConfig(**session.get("config", {}))
-    is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
     
-    if state.get("is_active"):
-        if is_live:
-            spot_price = await fetch_live_nifty_spot(session_id) or get_mock_nifty_spot()
-        else:
-            spot_price = get_mock_nifty_spot()
-        
+    # Check if we have live data available
+    spot_price = await fetch_live_nifty_spot(session_id)
+    if not spot_price:
+        spot_price = await fetch_live_nifty_spot_any_session()
+    
+    is_connected = spot_price is not None and spot_price > 0
+    
+    if state.get("is_active") and is_connected:
         state["last_spot_price"] = spot_price
         
         positions = await db.positions.find({"session_id": session_id}, {"_id": 0}).to_list(100)
         total_pnl = 0
         
         for pos in positions:
-            if is_live:
-                current_price = await fetch_live_option_ltp(session_id, pos.get("symbol")) or get_mock_option_premium(spot_price, pos.get("strike"), pos.get("position_type"))
-            else:
-                current_price = get_mock_option_premium(spot_price, pos.get("strike"), pos.get("position_type"))
+            current_price = await fetch_live_option_ltp(session_id, pos.get("symbol"))
+            if not current_price:
+                current_price = await fetch_live_option_ltp_any_session(pos.get("symbol"))
             
-            entry = pos.get("entry_price", 0)
-            pnl = (entry - current_price) * abs(pos.get("quantity", 0))
-            total_pnl += pnl
+            if current_price:
+                entry = pos.get("entry_price", 0)
+                pnl = (entry - current_price) * abs(pos.get("quantity", 0))
+                total_pnl += pnl
         
         state["daily_pnl"] = round(total_pnl, 2)
     
-    state["is_live_data"] = is_live
+    state["is_live_data"] = is_connected
+    state["is_connected"] = is_connected
     return state
 
 # Positions
 @api_router.get("/positions/{session_id}")
 async def get_positions(session_id: str):
-    """Get current positions"""
+    """Get current positions - LIVE DATA ONLY"""
     positions = await db.positions.find({"session_id": session_id}, {"_id": 0}).to_list(100)
     
-    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
-    config = StrategyConfig(**session.get("config", {}))
-    is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
+    # Get live spot price
+    spot_price = await fetch_live_nifty_spot(session_id)
+    if not spot_price:
+        spot_price = await fetch_live_nifty_spot_any_session()
     
-    if is_live:
-        spot_price = await fetch_live_nifty_spot(session_id) or get_mock_nifty_spot()
-    else:
-        spot_price = get_mock_nifty_spot()
+    is_connected = spot_price is not None and spot_price > 0
     
     for pos in positions:
-        if is_live:
-            pos["current_price"] = await fetch_live_option_ltp(session_id, pos.get("symbol")) or get_mock_option_premium(spot_price, pos.get("strike"), pos.get("position_type"))
+        if is_connected:
+            current_price = await fetch_live_option_ltp(session_id, pos.get("symbol"))
+            if not current_price:
+                current_price = await fetch_live_option_ltp_any_session(pos.get("symbol"))
+            
+            if current_price:
+                pos["current_price"] = current_price
+                entry = pos.get("entry_price", 0)
+                pos["pnl"] = round((entry - current_price) * abs(pos.get("quantity", 0)), 2)
+            else:
+                pos["current_price"] = 0
+                pos["pnl"] = 0
         else:
-            pos["current_price"] = get_mock_option_premium(spot_price, pos.get("strike"), pos.get("position_type"))
-        
-        entry = pos.get("entry_price", 0)
-        pos["pnl"] = round((entry - pos["current_price"]) * abs(pos.get("quantity", 0)), 2)
+            pos["current_price"] = 0
+            pos["pnl"] = 0
     
-    return {"positions": positions, "spot_price": spot_price, "is_live_data": is_live}
+    return {"positions": positions, "spot_price": spot_price or 0, "is_live_data": is_connected, "is_connected": is_connected}
 
 # Trades
 @api_router.get("/trades/{session_id}")
