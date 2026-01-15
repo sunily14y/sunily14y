@@ -252,10 +252,10 @@ async def fetch_live_nifty_spot(session_id: str) -> Optional[float]:
 async def fetch_live_nifty_spot_any_session() -> Optional[float]:
     """Fetch live NIFTY 50 spot price using any authenticated session"""
     try:
-        # Find any session with valid access token
         session = await db.sessions.find_one(
             {"access_token": {"$exists": True, "$ne": None}},
-            {"_id": 0}
+            {"_id": 0},
+            sort=[("login_time", -1)]
         )
         if session and session.get("access_token"):
             k = get_kite_for_session(session["access_token"])
@@ -295,19 +295,18 @@ async def fetch_live_option_ltp_any_session(symbol: str) -> Optional[float]:
     return None
 
 async def get_live_spot_price() -> tuple[float, bool]:
-    """Get live spot price, returns (price, is_live)"""
-    # Try to get live data from any authenticated session
+    """Get live spot price, returns (price, is_live) - NO MOCK DATA"""
     live_price = await fetch_live_nifty_spot_any_session()
     if live_price:
         return live_price, True
-    return get_mock_nifty_spot(), False
+    return 0.0, False
 
-async def get_live_option_price(symbol: str, strike: int, option_type: str, spot_price: float) -> tuple[float, bool]:
-    """Get live option price, returns (price, is_live)"""
+async def get_live_option_price(symbol: str, strike: int, option_type: str) -> tuple[float, bool]:
+    """Get live option price, returns (price, is_live) - NO MOCK DATA"""
     live_price = await fetch_live_option_ltp_any_session(symbol)
     if live_price:
         return live_price, True
-    return get_mock_option_premium(spot_price, strike, option_type), False
+    return 0.0, False
 
 async def place_live_order(session_id: str, symbol: str, transaction_type: str, quantity: int, order_type: str = "MARKET") -> Optional[str]:
     """Place live order on Zerodha"""
