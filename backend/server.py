@@ -26,6 +26,12 @@ from backtesting import (
     create_backtest_engine,
     remove_backtest_engine
 )
+from zerodha_historical import (
+    get_kite_with_token,
+    get_kite_sync,
+    fetch_zerodha_historical_sync,
+    get_available_trading_dates_sync
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
