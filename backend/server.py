@@ -1111,7 +1111,13 @@ async def start_backtest(
         "total_candles": len(engine.data),
         "first_timestamp": first_candle["timestamp"] if first_candle else None,
         "speed": speed,
-        "data_source": data_source
+        "data_source": data_source,
+        "config": {
+            "lot_size": backtest_config["lot_size"],
+            "strike_distance": backtest_config["strike_distance"],
+            "adjustment_zone": backtest_config["adjustment_zone"],
+            "max_daily_loss": backtest_config["max_daily_loss"]
+        }
     }
 
 @api_router.post("/backtest/stop")
