@@ -994,16 +994,39 @@ async def get_stats(session_id: str):
 
 @api_router.get("/backtest/available-dates")
 async def get_backtest_dates():
-    """Get list of available dates for backtesting (last 60 days)"""
+    """Get list of available dates for backtesting using Zerodha"""
     import asyncio
     import concurrent.futures
     
-    # Run the blocking yfinance call in a thread pool
+    # First try Zerodha Historical Data
+    try:
+        # Get access token from database
+        session = await db.sessions.find_one(
+            {"access_token": {"$exists": True, "$ne": None}},
+            {"_id": 0, "access_token": 1},
+            sort=[("login_time", -1)]
+        )
+        
+        if session and session.get("access_token"):
+            kite = get_kite_sync(session["access_token"])
+            
+            loop = asyncio.get_event_loop()
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                dates = await loop.run_in_executor(
+                    pool, get_available_trading_dates_sync, kite, 60
+                )
+            
+            if dates:
+                return {"dates": dates, "source": "zerodha"}
+    except Exception as e:
+        logger.warning(f"Zerodha historical failed, falling back to Yahoo: {e}")
+    
+    # Fallback to Yahoo Finance
     loop = asyncio.get_event_loop()
     with concurrent.futures.ThreadPoolExecutor() as pool:
         dates = await loop.run_in_executor(pool, get_available_dates, 60)
     
-    return {"dates": dates}
+    return {"dates": dates, "source": "yahoo"}
 
 @api_router.post("/backtest/start")
 async def start_backtest(session_id: str, date: str, speed: float = 1.0):
