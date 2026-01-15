@@ -1229,8 +1229,6 @@ async def stop_backtest_strategy(session_id: str):
     if not engine:
         raise HTTPException(status_code=400, detail="No active backtest")
     
-    spot = engine.get_spot_price()
-    
     ce_exit = engine.get_option_premium(engine.ce_strike, "CE") if engine.ce_strike else 0
     pe_exit = engine.get_option_premium(engine.pe_strike, "PE") if engine.pe_strike else 0
     
