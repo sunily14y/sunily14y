@@ -8,6 +8,7 @@ import { Label } from "../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Progress } from "../components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
+import { ScrollArea } from "../components/ui/scroll-area";
 import { cn } from "../lib/utils";
 import { 
   Play, 
@@ -15,7 +16,6 @@ import {
   Square, 
   FastForward, 
   SkipForward,
-  Calendar,
   Clock,
   TrendingUp,
   TrendingDown,
@@ -25,7 +25,12 @@ import {
   Search,
   FileSpreadsheet,
   Database,
-  RefreshCw
+  RefreshCw,
+  ArrowUpRight,
+  ArrowDownRight,
+  History,
+  DollarSign,
+  ListOrdered
 } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
@@ -46,6 +51,11 @@ const BacktestPage = () => {
   const [backtestState, setBacktestState] = useState(null);
   const [strategyActive, setStrategyActive] = useState(false);
   const [dataSource, setDataSource] = useState("");
+  
+  // P&L and History state
+  const [pnl, setPnl] = useState({ realized_pnl: 0, unrealized_pnl: 0, total_pnl: 0 });
+  const [trades, setTrades] = useState([]);
+  const [adjustments, setAdjustments] = useState([]);
   
   // Download state
   const [stockSearch, setStockSearch] = useState("");
@@ -82,6 +92,19 @@ const BacktestPage = () => {
       }
     } catch (error) {
       console.error("Failed to fetch dates:", error);
+    }
+  };
+
+  const fetchHistoryData = async () => {
+    try {
+      const [tradesRes, adjustmentsRes] = await Promise.all([
+        axios.get(`${API_URL}/backtest/trades`, { params: { session_id: sessionId } }),
+        axios.get(`${API_URL}/backtest/adjustments`, { params: { session_id: sessionId } })
+      ]);
+      setTrades(tradesRes.data.trades || []);
+      setAdjustments(adjustmentsRes.data.adjustments || []);
+    } catch (error) {
+      console.error("Failed to fetch history:", error);
     }
   };
 
@@ -185,6 +208,9 @@ const BacktestPage = () => {
       setIsRunning(true);
       setIsPaused(false);
       setDataSource(response.data.data_source);
+      setTrades([]);
+      setAdjustments([]);
+      setPnl({ realized_pnl: 0, unrealized_pnl: 0, total_pnl: 0 });
       toast.success(`Backtest started (${response.data.data_source} data)`);
       
       startAutoAdvance();
@@ -236,8 +262,16 @@ const BacktestPage = () => {
         
         setBacktestState(response.data);
         
-        if (response.data.adjustment_triggered) {
-          toast.info(`Adjustment #${response.data.adjustment_count}: CE=${response.data.ce_strike}, PE=${response.data.pe_strike}`);
+        // Update P&L
+        if (response.data.pnl) {
+          setPnl(response.data.pnl);
+        }
+        
+        if (response.data.adjustment_triggered && response.data.adjustment_info) {
+          const adj = response.data.adjustment_info;
+          toast.info(`Adjustment #${adj.number}: ${adj.direction} shift. CE=${response.data.ce_strike}, PE=${response.data.pe_strike}`);
+          // Refresh history after adjustment
+          fetchHistoryData();
         }
         
         if (response.data.progress?.is_complete) {
@@ -257,6 +291,10 @@ const BacktestPage = () => {
         params: { session_id: sessionId, steps }
       });
       setBacktestState(response.data);
+      if (response.data.pnl) {
+        setPnl(response.data.pnl);
+      }
+      fetchHistoryData();
     } catch (error) {
       console.error("Skip error:", error);
     }
@@ -275,7 +313,10 @@ const BacktestPage = () => {
         pe_strike: response.data.pe_strike
       }));
       
-      toast.success(`Strategy started: CE=${response.data.ce_strike}, PE=${response.data.pe_strike}`);
+      // Refresh history to show entry trades
+      fetchHistoryData();
+      
+      toast.success(`Strategy started: CE=${response.data.ce_strike}, PE=${response.data.pe_strike}. Premium collected: ₹${response.data.total_premium_collected}`);
     } catch (error) {
       toast.error("Failed to start strategy");
     }
@@ -288,7 +329,12 @@ const BacktestPage = () => {
       });
       
       setStrategyActive(false);
-      toast.success(`Strategy stopped. Adjustments: ${response.data.adjustment_count}`);
+      
+      // Refresh history to show exit trades
+      fetchHistoryData();
+      
+      const pnlColor = response.data.total_pnl >= 0 ? "text-emerald-500" : "text-red-500";
+      toast.success(`Strategy stopped. Total P&L: ₹${response.data.total_pnl}. Adjustments: ${response.data.adjustment_count}`);
     } catch (error) {
       toast.error("Failed to stop strategy");
     }
@@ -305,6 +351,12 @@ const BacktestPage = () => {
     if (!ts) return "--:--";
     const date = new Date(ts);
     return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const formatFullTimestamp = (ts) => {
+    if (!ts) return "--";
+    const date = new Date(ts);
+    return date.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   };
 
   const timeframes = [
@@ -341,17 +393,14 @@ const BacktestPage = () => {
 
         {/* Backtest Tab */}
         <TabsContent value="backtest" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Controls */}
-            <Card className="bg-card border-border">
-              <CardHeader>
+            <Card className="lg:col-span-3 bg-card border-border">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <Clock className="w-4 h-4 text-primary" />
                   Backtest Controls
                 </CardTitle>
-                <CardDescription>
-                  Replay historical market data
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {!isRunning ? (
@@ -385,8 +434,7 @@ const BacktestPage = () => {
                               {new Date(date).toLocaleDateString("en-IN", {
                                 weekday: "short",
                                 day: "numeric",
-                                month: "short",
-                                year: "numeric"
+                                month: "short"
                               })}
                             </SelectItem>
                           ))}
@@ -397,7 +445,7 @@ const BacktestPage = () => {
                     {/* Speed Selection */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
-                        <Label className="text-xs">Replay Speed</Label>
+                        <Label className="text-xs">Speed</Label>
                         <span className="text-xs font-mono">{speed}x</span>
                       </div>
                       <div className="flex gap-2">
@@ -440,7 +488,7 @@ const BacktestPage = () => {
                     {/* Running State */}
                     <div className="p-3 bg-violet-500/10 border border-violet-500/30 rounded-sm">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-xs text-muted-foreground">Replaying</span>
+                        <span className="text-xs text-muted-foreground">Date</span>
                         <span className="text-xs font-mono">{selectedDate}</span>
                       </div>
                       <div className="flex items-center justify-between">
@@ -497,53 +545,257 @@ const BacktestPage = () => {
               </CardContent>
             </Card>
 
-            {/* Live Data Display */}
-            <Card className="lg:col-span-2 bg-card border-border">
-              <CardHeader>
-                <CardTitle className="text-sm font-medium">Market Data</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isRunning && backtestState ? (
-                  <div className="space-y-6">
-                    {/* Spot Price */}
-                    <div className="text-center p-6 bg-secondary/30 rounded-sm">
+            {/* Main Display Area */}
+            <div className="lg:col-span-9 space-y-6">
+              {/* Live Data & P&L Display */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Spot Price */}
+                <Card className="bg-card border-border">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
                       <span className="text-xs text-muted-foreground">NIFTY 50</span>
-                      <div className="font-mono text-4xl font-bold mt-2">
-                        {backtestState?.spot_price?.toLocaleString("en-IN", { minimumFractionDigits: 2 }) || "0.00"}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-2">
-                        {formatTimestamp(backtestState?.timestamp)}
-                      </div>
+                      <Activity className="w-4 h-4 text-primary" />
                     </div>
+                    <div className="font-mono text-2xl font-bold">
+                      {isRunning ? (backtestState?.spot_price?.toLocaleString("en-IN", { minimumFractionDigits: 2 }) || "0.00") : "---"}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {isRunning ? formatTimestamp(backtestState?.timestamp) : "Select date to start"}
+                    </div>
+                  </CardContent>
+                </Card>
 
-                    {/* Strategy Positions */}
-                    {strategyActive && backtestState?.ce_strike && (
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-sm text-center">
-                          <span className="text-xs text-muted-foreground">CALL (CE)</span>
-                          <div className="font-mono text-2xl font-bold text-blue-500 mt-1">{backtestState.ce_strike}</div>
+                {/* Total P&L */}
+                <Card className="bg-card border-border">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-muted-foreground">Total P&L</span>
+                      {pnl.total_pnl >= 0 ? (
+                        <ArrowUpRight className="w-4 h-4 text-emerald-500" />
+                      ) : (
+                        <ArrowDownRight className="w-4 h-4 text-red-500" />
+                      )}
+                    </div>
+                    <div className={cn(
+                      "font-mono text-2xl font-bold",
+                      pnl.total_pnl >= 0 ? "text-emerald-500" : "text-red-500"
+                    )}>
+                      {pnl.total_pnl >= 0 ? "+" : ""}₹{pnl.total_pnl.toLocaleString("en-IN")}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Realized: ₹{pnl.realized_pnl.toLocaleString("en-IN")}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Adjustments */}
+                <Card className="bg-card border-border">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-muted-foreground">Adjustments</span>
+                      <Zap className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <div className="font-mono text-2xl font-bold">
+                      {backtestState?.adjustment_count || 0}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      Trades: {backtestState?.trade_count || trades.length || 0}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Current Positions */}
+                <Card className="bg-card border-border">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs text-muted-foreground">Positions</span>
+                      <Badge 
+                        variant="outline"
+                        className={cn(
+                          "text-xs",
+                          strategyActive ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : ""
+                        )}
+                      >
+                        {strategyActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
+                    {strategyActive && backtestState?.ce_strike ? (
+                      <div className="space-y-1">
+                        <div className="flex justify-between">
+                          <span className="text-xs text-blue-500">CE</span>
+                          <span className="font-mono text-sm font-bold">{backtestState.ce_strike}</span>
                         </div>
-                        <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-sm text-center">
-                          <span className="text-xs text-muted-foreground">PUT (PE)</span>
-                          <div className="font-mono text-2xl font-bold text-amber-500 mt-1">{backtestState.pe_strike}</div>
-                        </div>
-                        <div className="p-4 bg-secondary/50 rounded-sm text-center">
-                          <span className="text-xs text-muted-foreground flex items-center justify-center gap-1">
-                            <Zap className="w-3 h-3" /> Adjustments
-                          </span>
-                          <div className="font-mono text-2xl font-bold mt-1">{backtestState?.adjustment_count || 0}</div>
+                        <div className="flex justify-between">
+                          <span className="text-xs text-amber-500">PE</span>
+                          <span className="font-mono text-sm font-bold">{backtestState.pe_strike}</span>
                         </div>
                       </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">No positions</div>
                     )}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Database className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                    <p>Select a date and start backtest to see market data</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Trade History & Adjustments */}
+              {isRunning && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Trade History */}
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <ListOrdered className="w-4 h-4 text-primary" />
+                        Trade History
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ScrollArea className="h-[250px]">
+                        {trades.length > 0 ? (
+                          <div className="space-y-2">
+                            {trades.map((trade, idx) => (
+                              <div 
+                                key={idx}
+                                className={cn(
+                                  "p-3 rounded-sm border text-sm",
+                                  trade.action === "SELL" 
+                                    ? "bg-red-500/5 border-red-500/20" 
+                                    : "bg-emerald-500/5 border-emerald-500/20"
+                                )}
+                              >
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center gap-2">
+                                    <Badge 
+                                      variant="outline"
+                                      className={cn(
+                                        "text-xs",
+                                        trade.action === "SELL" ? "text-red-500 border-red-500/30" : "text-emerald-500 border-emerald-500/30"
+                                      )}
+                                    >
+                                      {trade.action}
+                                    </Badge>
+                                    <Badge variant="outline" className={cn(
+                                      "text-xs",
+                                      trade.option_type === "CE" ? "text-blue-500 border-blue-500/30" : "text-amber-500 border-amber-500/30"
+                                    )}>
+                                      {trade.option_type}
+                                    </Badge>
+                                    <span className="font-mono">{trade.strike}</span>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatFullTimestamp(trade.timestamp)}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs text-muted-foreground">
+                                    Premium: ₹{trade.premium?.toFixed(2)} × {trade.quantity}
+                                  </span>
+                                  {trade.pnl !== undefined && (
+                                    <span className={cn(
+                                      "font-mono text-xs font-medium",
+                                      trade.pnl >= 0 ? "text-emerald-500" : "text-red-500"
+                                    )}>
+                                      {trade.pnl >= 0 ? "+" : ""}₹{trade.pnl.toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                                {trade.is_adjustment && (
+                                  <Badge variant="outline" className="mt-1 text-xs text-amber-500 border-amber-500/30">
+                                    Adjustment #{trade.adjustment_number}
+                                  </Badge>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <History className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">No trades yet</p>
+                            <p className="text-xs">Start the strategy to see trades</p>
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </CardContent>
+                  </Card>
+
+                  {/* Adjustment History */}
+                  <Card className="bg-card border-border">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-amber-500" />
+                        Adjustment History
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ScrollArea className="h-[250px]">
+                        {adjustments.length > 0 ? (
+                          <div className="space-y-2">
+                            {adjustments.map((adj, idx) => (
+                              <div 
+                                key={idx}
+                                className={cn(
+                                  "p-3 rounded-sm border",
+                                  adj.direction === "UP" 
+                                    ? "bg-blue-500/5 border-blue-500/20" 
+                                    : "bg-amber-500/5 border-amber-500/20"
+                                )}
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <div className="flex items-center gap-2">
+                                    <Badge className={cn(
+                                      "text-xs",
+                                      adj.direction === "UP" 
+                                        ? "bg-blue-500/20 text-blue-500 border-blue-500/30" 
+                                        : "bg-amber-500/20 text-amber-500 border-amber-500/30"
+                                    )}>
+                                      #{adj.number} {adj.direction}
+                                    </Badge>
+                                  </div>
+                                  <span className="text-xs text-muted-foreground">
+                                    {formatFullTimestamp(adj.timestamp)}
+                                  </span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <span className="text-muted-foreground">Old: </span>
+                                    <span className="font-mono">CE {adj.old_ce_strike} / PE {adj.old_pe_strike}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">New: </span>
+                                    <span className="font-mono font-medium">CE {adj.new_ce_strike} / PE {adj.new_pe_strike}</span>
+                                  </div>
+                                </div>
+                                <div className="text-xs text-muted-foreground mt-1">
+                                  Spot: {adj.spot_price?.toFixed(2)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Zap className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                            <p className="text-sm">No adjustments yet</p>
+                            <p className="text-xs">Adjustments occur when spot approaches strikes</p>
+                          </div>
+                        )}
+                      </ScrollArea>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Empty State */}
+              {!isRunning && (
+                <Card className="bg-card border-border">
+                  <CardContent className="py-12">
+                    <div className="text-center text-muted-foreground">
+                      <Database className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                      <p className="text-lg font-medium">Ready to Backtest</p>
+                      <p className="text-sm mt-1">Select a date and start backtest to see P&L, trades, and adjustments</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           </div>
         </TabsContent>
 
@@ -565,7 +817,7 @@ const BacktestPage = () => {
                 {/* Search Input */}
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Search (e.g., RELIANCE, NIFTY, BANKNIFTY)"
+                    placeholder="Search (e.g., RELIANCE, NIFTY)"
                     value={stockSearch}
                     onChange={(e) => setStockSearch(e.target.value.toUpperCase())}
                     onKeyDown={(e) => e.key === "Enter" && searchStocks()}
@@ -578,27 +830,29 @@ const BacktestPage = () => {
 
                 {/* Search Results */}
                 {searchResults.length > 0 && (
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    <Label className="text-xs">Select Instrument</Label>
-                    {searchResults.map((inst, idx) => (
-                      <div
-                        key={idx}
-                        onClick={() => setSelectedStock(inst)}
-                        className={cn(
-                          "p-3 rounded-sm border cursor-pointer transition-colors",
-                          selectedStock?.instrument_token === inst.instrument_token
-                            ? "bg-primary/10 border-primary"
-                            : "bg-secondary/30 border-border hover:bg-secondary/50"
-                        )}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono font-medium">{inst.tradingsymbol}</span>
-                          <Badge variant="outline" className="text-xs">{inst.exchange}</Badge>
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-2">
+                      <Label className="text-xs">Select Instrument</Label>
+                      {searchResults.map((inst, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => setSelectedStock(inst)}
+                          className={cn(
+                            "p-3 rounded-sm border cursor-pointer transition-colors",
+                            selectedStock?.instrument_token === inst.instrument_token
+                              ? "bg-primary/10 border-primary"
+                              : "bg-secondary/30 border-border hover:bg-secondary/50"
+                          )}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono font-medium">{inst.tradingsymbol}</span>
+                            <Badge variant="outline" className="text-xs">{inst.exchange}</Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">{inst.name}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-1">{inst.name}</div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
                 )}
 
                 {/* Selected Stock */}
@@ -611,7 +865,6 @@ const BacktestPage = () => {
                       </Badge>
                     </div>
                     <div className="font-mono font-bold mt-1">{selectedStock.tradingsymbol}</div>
-                    <div className="text-xs text-muted-foreground">{selectedStock.name}</div>
                   </div>
                 )}
               </CardContent>
@@ -624,9 +877,6 @@ const BacktestPage = () => {
                   <FileSpreadsheet className="w-4 h-4 text-primary" />
                   Download Options
                 </CardTitle>
-                <CardDescription>
-                  Configure timeframe and date range
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Timeframe */}
@@ -668,11 +918,6 @@ const BacktestPage = () => {
                   </div>
                 </div>
 
-                {/* Info */}
-                <div className="p-3 bg-secondary/30 rounded-sm text-xs text-muted-foreground">
-                  <p><strong>Note:</strong> Minute-level data available for last 60 days. Daily data available for 2000+ days.</p>
-                </div>
-
                 {/* Download Button */}
                 <Button
                   onClick={downloadData}
@@ -699,7 +944,6 @@ const BacktestPage = () => {
           <Card className="bg-card border-border">
             <CardHeader>
               <CardTitle className="text-sm font-medium">Quick Download</CardTitle>
-              <CardDescription>Popular instruments</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
