@@ -1025,8 +1025,16 @@ async def get_backtest_dates():
     return {"dates": dates, "source": "yahoo"}
 
 @api_router.post("/backtest/start")
-async def start_backtest(session_id: str, date: str, speed: float = 1.0):
-    """Start a backtest session for a specific date using Zerodha data"""
+async def start_backtest(
+    session_id: str, 
+    date: str, 
+    speed: float = 1.0,
+    lot_size: int = None,
+    strike_distance: int = None,
+    adjustment_zone: int = None,
+    max_daily_loss: float = None
+):
+    """Start a backtest session with custom configuration"""
     import asyncio
     import concurrent.futures
     
@@ -1034,8 +1042,16 @@ async def start_backtest(session_id: str, date: str, speed: float = 1.0):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
+    # Build backtest config with custom parameters or defaults
     config = session.get("config", {})
-    engine = create_backtest_engine(session_id, config)
+    backtest_config = {
+        "lot_size": lot_size if lot_size is not None else config.get("lot_size", 1),
+        "strike_distance": strike_distance if strike_distance is not None else config.get("strike_distance", 200),
+        "adjustment_zone": adjustment_zone if adjustment_zone is not None else config.get("adjustment_zone", 50),
+        "max_daily_loss": max_daily_loss if max_daily_loss is not None else config.get("max_daily_loss")
+    }
+    
+    engine = create_backtest_engine(session_id, backtest_config)
     
     # Try Zerodha first
     data_loaded = False
