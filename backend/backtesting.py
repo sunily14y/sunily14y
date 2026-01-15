@@ -397,6 +397,7 @@ class BacktestEngine:
         self.trade_history = []
         self.adjustment_history = []
         self.realized_pnl = 0.0
+        self.max_loss_triggered = False
         
         # Record entry trades
         ce_trade = self.open_position(self.ce_strike, "CE", "SELL")
