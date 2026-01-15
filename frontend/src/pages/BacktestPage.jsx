@@ -461,6 +461,100 @@ const BacktestPage = () => {
                       </Select>
                     </div>
 
+                    {/* Strategy Configuration */}
+                    <div className="p-3 bg-secondary/30 border border-border rounded-sm space-y-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Settings className="w-4 h-4 text-primary" />
+                        <span className="text-xs font-medium">Strategy Config</span>
+                      </div>
+                      
+                      {/* Lot Size */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs flex items-center gap-1">
+                            <Target className="w-3 h-3" />
+                            Lot Size
+                          </Label>
+                          <span className="text-xs font-mono bg-primary/10 px-2 py-0.5 rounded">
+                            {backtestConfig.lot_size} ({backtestConfig.lot_size * 25} qty)
+                          </span>
+                        </div>
+                        <Slider
+                          value={[backtestConfig.lot_size]}
+                          onValueChange={([val]) => setBacktestConfig(prev => ({ ...prev, lot_size: val }))}
+                          min={1}
+                          max={10}
+                          step={1}
+                          className="py-2"
+                        />
+                      </div>
+                      
+                      {/* Strike Distance */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3" />
+                            Strike Distance
+                          </Label>
+                          <span className="text-xs font-mono bg-primary/10 px-2 py-0.5 rounded">
+                            ±{backtestConfig.strike_distance}
+                          </span>
+                        </div>
+                        <Slider
+                          value={[backtestConfig.strike_distance]}
+                          onValueChange={([val]) => setBacktestConfig(prev => ({ ...prev, strike_distance: val }))}
+                          min={50}
+                          max={500}
+                          step={50}
+                          className="py-2"
+                        />
+                      </div>
+                      
+                      {/* Adjustment Zone */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs flex items-center gap-1">
+                            <Shield className="w-3 h-3" />
+                            Adjustment Zone
+                          </Label>
+                          <span className="text-xs font-mono bg-primary/10 px-2 py-0.5 rounded">
+                            {backtestConfig.adjustment_zone} pts
+                          </span>
+                        </div>
+                        <Slider
+                          value={[backtestConfig.adjustment_zone]}
+                          onValueChange={([val]) => setBacktestConfig(prev => ({ ...prev, adjustment_zone: val }))}
+                          min={25}
+                          max={100}
+                          step={5}
+                          className="py-2"
+                        />
+                      </div>
+                      
+                      {/* Max Daily Loss */}
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs flex items-center gap-1">
+                            <AlertTriangle className="w-3 h-3" />
+                            Max Daily Loss
+                          </Label>
+                          <span className="text-xs font-mono bg-red-500/10 text-red-500 px-2 py-0.5 rounded">
+                            {backtestConfig.max_daily_loss ? `₹${backtestConfig.max_daily_loss}` : "Disabled"}
+                          </span>
+                        </div>
+                        <Input
+                          type="number"
+                          placeholder="e.g., 5000 (0 = disabled)"
+                          value={backtestConfig.max_daily_loss || ""}
+                          onChange={(e) => setBacktestConfig(prev => ({ 
+                            ...prev, 
+                            max_daily_loss: e.target.value ? parseInt(e.target.value) : null 
+                          }))}
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+
                     {/* Speed Selection */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
