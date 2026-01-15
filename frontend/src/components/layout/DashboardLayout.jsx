@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   Bell,
-  Activity
+  Activity,
+  Clock
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 
@@ -52,6 +53,11 @@ const DashboardLayout = ({ children }) => {
       path: '/dashboard', 
       label: 'Dashboard', 
       icon: LayoutDashboard 
+    },
+    { 
+      path: '/backtest', 
+      label: 'Backtest & Data', 
+      icon: Clock 
     },
     { 
       path: '/history', 
