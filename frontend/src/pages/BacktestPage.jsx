@@ -213,7 +213,15 @@ const BacktestPage = () => {
     setIsLoading(true);
     try {
       const response = await axios.post(`${API_URL}/backtest/start`, null, {
-        params: { session_id: sessionId, date: selectedDate, speed }
+        params: { 
+          session_id: sessionId, 
+          date: selectedDate, 
+          speed,
+          lot_size: backtestConfig.lot_size,
+          strike_distance: backtestConfig.strike_distance,
+          adjustment_zone: backtestConfig.adjustment_zone,
+          max_daily_loss: backtestConfig.max_daily_loss || undefined
+        }
       });
       
       setIsRunning(true);
@@ -222,7 +230,7 @@ const BacktestPage = () => {
       setTrades([]);
       setAdjustments([]);
       setPnl({ realized_pnl: 0, unrealized_pnl: 0, total_pnl: 0 });
-      toast.success(`Backtest started (${response.data.data_source} data)`);
+      toast.success(`Backtest started with Lot=${backtestConfig.lot_size}, Strike=${backtestConfig.strike_distance}, Zone=${backtestConfig.adjustment_zone}`);
       
       startAutoAdvance();
     } catch (error) {
