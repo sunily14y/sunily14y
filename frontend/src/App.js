@@ -7,6 +7,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import TradeHistoryPage from "./pages/TradeHistoryPage";
 import SettingsPage from "./pages/SettingsPage";
+import BacktestPage from "./pages/BacktestPage";
 import DashboardLayout from "./components/layout/DashboardLayout";
 
 // Component to handle auth callback
@@ -102,6 +103,18 @@ function AppContent() {
             sessionId ? (
               <DashboardLayout>
                 <SettingsPage />
+              </DashboardLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/backtest"
+          element={
+            sessionId ? (
+              <DashboardLayout>
+                <BacktestPage />
               </DashboardLayout>
             ) : (
               <Navigate to="/login" replace />
