@@ -787,7 +787,7 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
 
 @api_router.post("/strategy/stop")
 async def stop_strategy(session_id: str):
-    """Stop the trading strategy and exit all positions"""
+    """Stop the trading strategy and exit all positions - LIVE DATA ONLY"""
     state = await db.strategy_states.find_one({"session_id": session_id}, {"_id": 0})
     if not state or not state.get("is_active"):
         raise HTTPException(status_code=400, detail="Strategy is not active")
@@ -796,11 +796,16 @@ async def stop_strategy(session_id: str):
     config = StrategyConfig(**session.get("config", {}))
     is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
     
-    # Get spot price
-    if is_live:
-        spot_price = await fetch_live_nifty_spot(session_id) or get_mock_nifty_spot()
-    else:
-        spot_price = get_mock_nifty_spot()
+    # Get spot price - LIVE DATA ONLY
+    spot_price = await fetch_live_nifty_spot(session_id)
+    if not spot_price:
+        spot_price = await fetch_live_nifty_spot_any_session()
+    
+    if not spot_price:
+        raise HTTPException(
+            status_code=503,
+            detail="Disconnected - No live data available. Cannot stop strategy safely."
+        )
     
     lot_size = config.lot_size * 25
     ce_strike = state.get("ce_strike")
@@ -808,13 +813,20 @@ async def stop_strategy(session_id: str):
     ce_symbol = state.get("ce_symbol")
     pe_symbol = state.get("pe_symbol")
     
-    # Get exit prices
-    if is_live:
-        ce_exit_price = await fetch_live_option_ltp(session_id, ce_symbol) or get_mock_option_premium(spot_price, ce_strike, "CE")
-        pe_exit_price = await fetch_live_option_ltp(session_id, pe_symbol) or get_mock_option_premium(spot_price, pe_strike, "PE")
-    else:
-        ce_exit_price = get_mock_option_premium(spot_price, ce_strike, "CE")
-        pe_exit_price = get_mock_option_premium(spot_price, pe_strike, "PE")
+    # Get exit prices - LIVE DATA ONLY
+    ce_exit_price = await fetch_live_option_ltp(session_id, ce_symbol)
+    pe_exit_price = await fetch_live_option_ltp(session_id, pe_symbol)
+    
+    if not ce_exit_price:
+        ce_exit_price = await fetch_live_option_ltp_any_session(ce_symbol)
+    if not pe_exit_price:
+        pe_exit_price = await fetch_live_option_ltp_any_session(pe_symbol)
+    
+    if not ce_exit_price or not pe_exit_price:
+        raise HTTPException(
+            status_code=503,
+            detail="Disconnected - Cannot fetch exit prices. Please login with Zerodha."
+        )
     
     # Place exit orders
     order_ids = {"ce": None, "pe": None}
