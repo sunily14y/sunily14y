@@ -596,11 +596,11 @@ async def auth_callback_post(session_id: str, request_token: str = "mock_token")
 # Market Data
 @api_router.get("/market/spot")
 async def get_nifty_spot(session_id: str = None):
-    """Get current NIFTY 50 spot price - always tries live data first"""
+    """Get current NIFTY 50 spot price - LIVE DATA ONLY"""
     spot_price, is_live = await get_live_spot_price()
     
-    # Store in history for charting
-    if is_live:
+    # Store in history for charting only if we have live data
+    if is_live and spot_price > 0:
         await db.spot_history.insert_one({
             "price": spot_price,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -610,34 +610,41 @@ async def get_nifty_spot(session_id: str = None):
     return {
         "spot_price": spot_price,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "high": spot_price + random.uniform(50, 150),
-        "low": spot_price - random.uniform(50, 150),
-        "open": spot_price + random.uniform(-100, 100),
-        "close": spot_price,
-        "is_live": is_live
+        "is_live": is_live,
+        "is_connected": is_live and spot_price > 0
     }
 
 @api_router.get("/market/options-chain")
 async def get_options_chain(session_id: str = None):
-    """Get NIFTY options chain - always tries live data first"""
+    """Get NIFTY options chain - LIVE DATA ONLY (returns empty if disconnected)"""
     spot_price, is_live = await get_live_spot_price()
     
-    chain = get_mock_options_chain(spot_price)
+    if not is_live or spot_price == 0:
+        return {
+            "spot_price": 0,
+            "atm_strike": 0,
+            "chain": [],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "is_live": False,
+            "is_connected": False
+        }
+    
     atm_strike = round(spot_price / 50) * 50
     
+    # TODO: Fetch real options chain from Zerodha when available
+    # For now, return basic structure with spot price
     return {
         "spot_price": spot_price,
         "atm_strike": atm_strike,
-        "chain": [item.model_dump() for item in chain],
+        "chain": [],
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "is_live": is_live
+        "is_live": is_live,
+        "is_connected": True
     }
 
 @api_router.get("/market/spot-history")
 async def get_spot_history(minutes: int = 60, session_id: str = None):
-    """Get historical spot prices for charting"""
-    history = []
-    
+    """Get historical spot prices for charting - LIVE DATA ONLY"""
     # Try to get live history from database
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     live_history = await db.spot_history.find(
@@ -645,24 +652,12 @@ async def get_spot_history(minutes: int = 60, session_id: str = None):
         {"_id": 0}
     ).sort("timestamp", 1).to_list(500)
     
-    if live_history and len(live_history) > 5:
+    if live_history and len(live_history) > 0:
         history = [{"timestamp": h["timestamp"], "price": h["price"]} for h in live_history]
-        return {"history": history, "is_live": True}
+        return {"history": history, "is_live": True, "is_connected": True}
     
-    # Fallback to mock data
-    spot_price, _ = await get_live_spot_price()
-    now = datetime.now(timezone.utc)
-    
-    for i in range(minutes, 0, -1):
-        timestamp = now - timedelta(minutes=i)
-        variation = random.uniform(-50, 50) * (1 + 0.1 * random.random())
-        price = spot_price + variation + (i * random.uniform(-0.5, 0.5))
-        history.append({
-            "timestamp": timestamp.isoformat(),
-            "price": round(price, 2)
-        })
-    
-    return {"history": history, "is_live": False}
+    # No historical data available - return empty
+    return {"history": [], "is_live": False, "is_connected": False}
 
 # Check Zerodha auth status
 @api_router.get("/auth/status")
