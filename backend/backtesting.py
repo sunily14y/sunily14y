@@ -307,6 +307,239 @@ class BacktestEngine:
         """Get past candles for chart"""
         start = max(0, self.current_index - count)
         return self.data[start:self.current_index + 1]
+    
+    def open_position(self, strike: int, option_type: str, action: str = "SELL") -> Dict:
+        """Open a position and record the trade"""
+        premium = self.get_option_premium(strike, option_type)
+        candle = self.get_current_candle()
+        timestamp = candle["timestamp"] if candle else datetime.now(timezone.utc).isoformat()
+        
+        trade = {
+            "id": len(self.trade_history) + 1,
+            "timestamp": timestamp,
+            "strike": strike,
+            "option_type": option_type,
+            "action": action,
+            "premium": premium,
+            "quantity": self.lot_size,
+            "spot_price": self.get_spot_price(),
+            "is_adjustment": False,
+            "adjustment_number": None
+        }
+        self.trade_history.append(trade)
+        return trade
+    
+    def close_position(self, strike: int, option_type: str, action: str = "BUY", 
+                       is_adjustment: bool = False, adjustment_number: int = None) -> Dict:
+        """Close a position and calculate P&L"""
+        premium = self.get_option_premium(strike, option_type)
+        candle = self.get_current_candle()
+        timestamp = candle["timestamp"] if candle else datetime.now(timezone.utc).isoformat()
+        
+        # Find entry trade for this position
+        entry_premium = 0
+        for t in reversed(self.trade_history):
+            if t["strike"] == strike and t["option_type"] == option_type and t["action"] == "SELL":
+                entry_premium = t["premium"]
+                break
+        
+        # P&L for short position: entry premium - exit premium
+        pnl = (entry_premium - premium) * self.lot_size
+        self.realized_pnl += pnl
+        
+        trade = {
+            "id": len(self.trade_history) + 1,
+            "timestamp": timestamp,
+            "strike": strike,
+            "option_type": option_type,
+            "action": action,
+            "premium": premium,
+            "quantity": self.lot_size,
+            "spot_price": self.get_spot_price(),
+            "pnl": round(pnl, 2),
+            "is_adjustment": is_adjustment,
+            "adjustment_number": adjustment_number
+        }
+        self.trade_history.append(trade)
+        return trade
+    
+    def record_adjustment(self, direction: str, old_ce: int, old_pe: int, 
+                          new_ce: int, new_pe: int, spot: float, reason: str) -> Dict:
+        """Record an adjustment event"""
+        candle = self.get_current_candle()
+        timestamp = candle["timestamp"] if candle else datetime.now(timezone.utc).isoformat()
+        
+        adjustment = {
+            "number": self.adjustment_count,
+            "timestamp": timestamp,
+            "direction": direction,
+            "old_ce_strike": old_ce,
+            "old_pe_strike": old_pe,
+            "new_ce_strike": new_ce,
+            "new_pe_strike": new_pe,
+            "spot_price": spot,
+            "reason": reason
+        }
+        self.adjustment_history.append(adjustment)
+        return adjustment
+    
+    def start_strategy_with_tracking(self) -> Dict:
+        """Start strategy and record entry trades"""
+        spot = self.get_spot_price()
+        atm = round(spot / 50) * 50
+        strike_distance = self.config.get("strike_distance", 200)
+        
+        self.ce_strike = atm + strike_distance
+        self.pe_strike = atm - strike_distance
+        self.adjustment_count = 0
+        self.trade_history = []
+        self.adjustment_history = []
+        self.realized_pnl = 0.0
+        
+        # Record entry trades
+        ce_trade = self.open_position(self.ce_strike, "CE", "SELL")
+        pe_trade = self.open_position(self.pe_strike, "PE", "SELL")
+        
+        self.entry_ce_premium = ce_trade["premium"]
+        self.entry_pe_premium = pe_trade["premium"]
+        
+        return {
+            "ce_strike": self.ce_strike,
+            "pe_strike": self.pe_strike,
+            "ce_premium": ce_trade["premium"],
+            "pe_premium": pe_trade["premium"],
+            "spot_price": spot,
+            "total_premium_collected": round((ce_trade["premium"] + pe_trade["premium"]) * self.lot_size, 2)
+        }
+    
+    def stop_strategy_with_tracking(self) -> Dict:
+        """Stop strategy and record exit trades"""
+        if not self.ce_strike or not self.pe_strike:
+            return {"success": False, "message": "No active strategy"}
+        
+        # Record exit trades
+        ce_trade = self.close_position(self.ce_strike, "CE", "BUY")
+        pe_trade = self.close_position(self.pe_strike, "PE", "BUY")
+        
+        total_pnl = self.realized_pnl
+        
+        result = {
+            "success": True,
+            "ce_strike": self.ce_strike,
+            "pe_strike": self.pe_strike,
+            "ce_exit_premium": ce_trade["premium"],
+            "pe_exit_premium": pe_trade["premium"],
+            "adjustment_count": self.adjustment_count,
+            "total_pnl": round(total_pnl, 2),
+            "trade_count": len(self.trade_history)
+        }
+        
+        self.ce_strike = None
+        self.pe_strike = None
+        
+        return result
+    
+    def check_and_adjust(self) -> Optional[Dict]:
+        """Check if adjustment is needed and execute"""
+        if not self.ce_strike or not self.pe_strike:
+            return None
+        
+        spot = self.get_spot_price()
+        adjustment_zone = self.config.get("adjustment_zone", 50)
+        
+        adjustment_triggered = False
+        direction = None
+        reason = None
+        old_ce = self.ce_strike
+        old_pe = self.pe_strike
+        
+        # Check CALL side
+        if spot >= self.ce_strike - adjustment_zone:
+            direction = "UP"
+            reason = f"Spot ({spot:.0f}) reached CE adjustment zone ({self.ce_strike - adjustment_zone})"
+            adjustment_triggered = True
+        # Check PUT side
+        elif spot <= self.pe_strike + adjustment_zone:
+            direction = "DOWN"
+            reason = f"Spot ({spot:.0f}) reached PE adjustment zone ({self.pe_strike + adjustment_zone})"
+            adjustment_triggered = True
+        
+        if adjustment_triggered:
+            self.adjustment_count += 1
+            
+            # Close existing positions
+            self.close_position(self.ce_strike, "CE", "BUY", True, self.adjustment_count)
+            self.close_position(self.pe_strike, "PE", "BUY", True, self.adjustment_count)
+            
+            # Shift strikes
+            shift = 50
+            if direction == "UP":
+                self.ce_strike += shift
+                self.pe_strike += shift
+            else:
+                self.ce_strike -= shift
+                self.pe_strike -= shift
+            
+            # Open new positions
+            self.open_position(self.ce_strike, "CE", "SELL")
+            self.open_position(self.pe_strike, "PE", "SELL")
+            
+            # Record adjustment
+            adj = self.record_adjustment(
+                direction, old_ce, old_pe, 
+                self.ce_strike, self.pe_strike, 
+                spot, reason
+            )
+            
+            return adj
+        
+        return None
+    
+    def get_current_pnl(self) -> Dict:
+        """Calculate current P&L (realized + unrealized)"""
+        unrealized_pnl = 0.0
+        
+        if self.ce_strike and self.pe_strike:
+            # Find last entry prices
+            ce_entry = 0
+            pe_entry = 0
+            for t in reversed(self.trade_history):
+                if t["strike"] == self.ce_strike and t["option_type"] == "CE" and t["action"] == "SELL":
+                    ce_entry = t["premium"]
+                    break
+            for t in reversed(self.trade_history):
+                if t["strike"] == self.pe_strike and t["option_type"] == "PE" and t["action"] == "SELL":
+                    pe_entry = t["premium"]
+                    break
+            
+            # Current premiums
+            ce_current = self.get_option_premium(self.ce_strike, "CE")
+            pe_current = self.get_option_premium(self.pe_strike, "PE")
+            
+            # Unrealized P&L for short positions
+            unrealized_pnl = ((ce_entry - ce_current) + (pe_entry - pe_current)) * self.lot_size
+        
+        return {
+            "realized_pnl": round(self.realized_pnl, 2),
+            "unrealized_pnl": round(unrealized_pnl, 2),
+            "total_pnl": round(self.realized_pnl + unrealized_pnl, 2)
+        }
+    
+    def get_summary(self) -> Dict:
+        """Get complete backtest summary"""
+        pnl = self.get_current_pnl()
+        candle = self.get_current_candle()
+        
+        return {
+            "spot_price": self.get_spot_price(),
+            "timestamp": candle["timestamp"] if candle else None,
+            "ce_strike": self.ce_strike,
+            "pe_strike": self.pe_strike,
+            "adjustment_count": self.adjustment_count,
+            "trade_count": len(self.trade_history),
+            "pnl": pnl,
+            "progress": self.get_progress()
+        }
 
 
 # Global backtest sessions storage
