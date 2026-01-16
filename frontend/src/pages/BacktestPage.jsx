@@ -490,7 +490,7 @@ const BacktestPage = () => {
                             Lot Size
                           </Label>
                           <span className="text-xs font-mono bg-primary/10 px-2 py-0.5 rounded">
-                            {backtestConfig.lot_size} ({backtestConfig.lot_size * 25} qty)
+                            {backtestConfig.lot_size} lot = {backtestConfig.lot_size * niftyLotSize} qty
                           </span>
                         </div>
                         <Slider
@@ -501,6 +501,9 @@ const BacktestPage = () => {
                           step={1}
                           className="py-2"
                         />
+                        <div className="text-[10px] text-muted-foreground">
+                          NIFTY lot size: {niftyLotSize} qty (from Kite API)
+                        </div>
                       </div>
                       
                       {/* Strike Distance */}
