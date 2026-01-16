@@ -1146,13 +1146,17 @@ async def start_backtest(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     
+    # Get NIFTY lot size from Kite API
+    nifty_lot_size = await get_nifty_lot_size()
+    
     # Build backtest config with custom parameters or defaults
     config = session.get("config", {})
     backtest_config = {
         "lot_size": lot_size if lot_size is not None else config.get("lot_size", 1),
         "strike_distance": strike_distance if strike_distance is not None else config.get("strike_distance", 200),
         "adjustment_zone": adjustment_zone if adjustment_zone is not None else config.get("adjustment_zone", 50),
-        "max_daily_loss": max_daily_loss if max_daily_loss is not None else config.get("max_daily_loss")
+        "max_daily_loss": max_daily_loss if max_daily_loss is not None else config.get("max_daily_loss"),
+        "nifty_lot_size": nifty_lot_size
     }
     
     engine = create_backtest_engine(session_id, backtest_config)
