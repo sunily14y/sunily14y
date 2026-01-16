@@ -55,6 +55,9 @@ const BacktestPage = () => {
   const [strategyActive, setStrategyActive] = useState(false);
   const [dataSource, setDataSource] = useState("");
   
+  // NIFTY lot size from Kite API
+  const [niftyLotSize, setNiftyLotSize] = useState(75);
+  
   // Strategy Configuration for Backtest
   const [backtestConfig, setBacktestConfig] = useState({
     lot_size: 1,
@@ -80,8 +83,19 @@ const BacktestPage = () => {
   
   const intervalRef = useRef(null);
 
+  // Fetch NIFTY lot size
+  const fetchNiftyLotSize = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/market/nifty-lot-size`);
+      setNiftyLotSize(response.data.lot_size || 75);
+    } catch (error) {
+      console.error("Failed to fetch lot size:", error);
+    }
+  };
+
   useEffect(() => {
     fetchAvailableDates();
+    fetchNiftyLotSize();
     // Set default dates for download
     const today = new Date();
     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
