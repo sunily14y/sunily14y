@@ -124,7 +124,7 @@ const SettingsPage = () => {
                 placeholder="Enter any lot size"
               />
               <p className="text-xs text-muted-foreground">
-                1 lot = 25 units (NIFTY). No upper limit.
+                Lot size fetched from Kite API. No upper limit.
               </p>
             </div>
 
