@@ -208,8 +208,13 @@ export const useTradingStore = create((set, get) => ({
       set({ isLoading: false });
       return response.data;
     } catch (error) {
-      set({ error: error.message, isLoading: false });
-      get().addNotification({ type: 'error', message: error.message });
+      set({ isLoading: false });
+      
+      // Extract error message from response
+      const errorMessage = error.response?.data?.detail || error.message || 'Failed to start strategy';
+      
+      set({ error: errorMessage });
+      get().addNotification({ type: 'error', message: errorMessage });
       throw error;
     }
   },
