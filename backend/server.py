@@ -821,7 +821,7 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
     # Create trades
     trades = [
         Trade(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, action=OrderAction.SELL, quantity=lot_quantity, price=ce_price, order_id=order_ids["ce"], paper_trade=not is_live),
-        Trade(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, action=OrderAction.SELL, quantity=lot_size, price=pe_price, order_id=order_ids["pe"], paper_trade=not is_live)
+        Trade(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, action=OrderAction.SELL, quantity=lot_quantity, price=pe_price, order_id=order_ids["pe"], paper_trade=not is_live)
     ]
     
     for trade in trades:
@@ -831,8 +831,8 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
     
     # Create positions
     positions = [
-        Position(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, quantity=-lot_size, entry_price=ce_price, current_price=ce_price),
-        Position(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, quantity=-lot_size, entry_price=pe_price, current_price=pe_price)
+        Position(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, quantity=-lot_quantity, entry_price=ce_price, current_price=ce_price),
+        Position(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, quantity=-lot_quantity, entry_price=pe_price, current_price=pe_price)
     ]
     
     for pos in positions:
@@ -851,6 +851,7 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
             "pe_symbol": pe_symbol,
             "adjustment_count": 0,
             "last_spot_price": spot_price,
+            "nifty_lot_size": nifty_lot_size,
             "start_time": datetime.now(timezone.utc).isoformat(),
             "last_update": datetime.now(timezone.utc).isoformat()
         }}
@@ -868,7 +869,10 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
         "pe_symbol": pe_symbol,
         "ce_premium": ce_price,
         "pe_premium": pe_price,
-        "message": f"Strategy started {'(LIVE)' if is_live else '(PAPER)'}. Sold {ce_symbol} @ {ce_price} and {pe_symbol} @ {pe_price}"
+        "lot_size": config.lot_size,
+        "nifty_lot_size": nifty_lot_size,
+        "quantity": lot_quantity,
+        "message": f"Strategy started {'(LIVE)' if is_live else '(PAPER)'}. Sold {ce_symbol} @ {ce_price} and {pe_symbol} @ {pe_price}. Qty: {lot_quantity} ({config.lot_size} lots x {nifty_lot_size})"
     }
 
 @api_router.post("/strategy/stop")
