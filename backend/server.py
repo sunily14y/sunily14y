@@ -897,7 +897,10 @@ async def stop_strategy(session_id: str):
             detail="Disconnected - No live data available. Cannot stop strategy safely."
         )
     
-    lot_size = config.lot_size * 25
+    # Get NIFTY lot size (use cached from state if available)
+    nifty_lot_size = state.get("nifty_lot_size") or await get_nifty_lot_size()
+    lot_quantity = config.lot_size * nifty_lot_size
+    
     ce_strike = state.get("ce_strike")
     pe_strike = state.get("pe_strike")
     ce_symbol = state.get("ce_symbol")
@@ -923,15 +926,15 @@ async def stop_strategy(session_id: str):
     
     if is_live:
         try:
-            order_ids["ce"] = await place_live_order(session_id, ce_symbol, "BUY", lot_size)
-            order_ids["pe"] = await place_live_order(session_id, pe_symbol, "BUY", lot_size)
+            order_ids["ce"] = await place_live_order(session_id, ce_symbol, "BUY", lot_quantity)
+            order_ids["pe"] = await place_live_order(session_id, pe_symbol, "BUY", lot_quantity)
         except Exception as e:
             logger.error(f"Error placing exit orders: {e}")
     
     # Record exit trades
     trades = [
-        Trade(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, action=OrderAction.BUY, quantity=lot_size, price=ce_exit_price, order_id=order_ids["ce"], paper_trade=not is_live),
-        Trade(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, action=OrderAction.BUY, quantity=lot_size, price=pe_exit_price, order_id=order_ids["pe"], paper_trade=not is_live)
+        Trade(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, action=OrderAction.BUY, quantity=lot_quantity, price=ce_exit_price, order_id=order_ids["ce"], paper_trade=not is_live),
+        Trade(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, action=OrderAction.BUY, quantity=lot_quantity, price=pe_exit_price, order_id=order_ids["pe"], paper_trade=not is_live)
     ]
     
     for trade in trades:
