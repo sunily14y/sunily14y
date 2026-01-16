@@ -466,7 +466,9 @@ class TradingEngine:
             new_pe_strike = state.pe_strike - shift_amount
             reason = f"NIFTY moved DOWN to {spot_price}, near PE strike {state.pe_strike}"
         
-        lot_size = config.lot_size * 25
+        # Get NIFTY lot size dynamically
+        nifty_lot_size = await get_nifty_lot_size()
+        lot_quantity = config.lot_size * nifty_lot_size
         
         # Get prices - always from live feed
         ce_exit_price = await fetch_live_option_ltp(session_id, state.ce_symbol)
