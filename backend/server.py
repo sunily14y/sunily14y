@@ -784,7 +784,10 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
     ce_strike = atm_strike + config.strike_distance
     pe_strike = atm_strike - config.strike_distance
     
-    lot_size = config.lot_size * 25
+    # Get NIFTY lot size from Kite API (dynamic)
+    nifty_lot_size = await get_nifty_lot_size()
+    lot_quantity = config.lot_size * nifty_lot_size
+    
     expiry = get_nifty_weekly_expiry()
     
     ce_symbol = format_nifty_option_symbol(ce_strike, "CE", expiry)
@@ -810,14 +813,14 @@ async def start_strategy(session_id: str, background_tasks: BackgroundTasks):
     
     if is_live:
         try:
-            order_ids["ce"] = await place_live_order(session_id, ce_symbol, "SELL", lot_size)
-            order_ids["pe"] = await place_live_order(session_id, pe_symbol, "SELL", lot_size)
+            order_ids["ce"] = await place_live_order(session_id, ce_symbol, "SELL", lot_quantity)
+            order_ids["pe"] = await place_live_order(session_id, pe_symbol, "SELL", lot_quantity)
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Order placement failed: {str(e)}")
     
     # Create trades
     trades = [
-        Trade(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, action=OrderAction.SELL, quantity=lot_size, price=ce_price, order_id=order_ids["ce"], paper_trade=not is_live),
+        Trade(session_id=session_id, symbol=ce_symbol, strike=ce_strike, position_type=PositionType.CE, action=OrderAction.SELL, quantity=lot_quantity, price=ce_price, order_id=order_ids["ce"], paper_trade=not is_live),
         Trade(session_id=session_id, symbol=pe_symbol, strike=pe_strike, position_type=PositionType.PE, action=OrderAction.SELL, quantity=lot_size, price=pe_price, order_id=order_ids["pe"], paper_trade=not is_live)
     ]
     
