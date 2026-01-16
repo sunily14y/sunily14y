@@ -506,20 +506,20 @@ class TradingEngine:
         
         if is_live:
             try:
-                order_ids["ce_exit"] = await place_live_order(session_id, state.ce_symbol, "BUY", lot_size)
-                order_ids["pe_exit"] = await place_live_order(session_id, state.pe_symbol, "BUY", lot_size)
-                order_ids["ce_entry"] = await place_live_order(session_id, new_ce_symbol, "SELL", lot_size)
-                order_ids["pe_entry"] = await place_live_order(session_id, new_pe_symbol, "SELL", lot_size)
+                order_ids["ce_exit"] = await place_live_order(session_id, state.ce_symbol, "BUY", lot_quantity)
+                order_ids["pe_exit"] = await place_live_order(session_id, state.pe_symbol, "BUY", lot_quantity)
+                order_ids["ce_entry"] = await place_live_order(session_id, new_ce_symbol, "SELL", lot_quantity)
+                order_ids["pe_entry"] = await place_live_order(session_id, new_pe_symbol, "SELL", lot_quantity)
             except Exception as e:
                 logger.error(f"Error placing adjustment orders: {e}")
                 return
         
         # Record trades
         trades = [
-            Trade(session_id=session_id, symbol=state.ce_symbol, strike=state.ce_strike, position_type=PositionType.CE, action=OrderAction.BUY, quantity=lot_size, price=ce_exit_price, order_id=order_ids["ce_exit"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
-            Trade(session_id=session_id, symbol=state.pe_symbol, strike=state.pe_strike, position_type=PositionType.PE, action=OrderAction.BUY, quantity=lot_size, price=pe_exit_price, order_id=order_ids["pe_exit"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
-            Trade(session_id=session_id, symbol=new_ce_symbol, strike=new_ce_strike, position_type=PositionType.CE, action=OrderAction.SELL, quantity=lot_size, price=new_ce_price, order_id=order_ids["ce_entry"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
-            Trade(session_id=session_id, symbol=new_pe_symbol, strike=new_pe_strike, position_type=PositionType.PE, action=OrderAction.SELL, quantity=lot_size, price=new_pe_price, order_id=order_ids["pe_entry"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
+            Trade(session_id=session_id, symbol=state.ce_symbol, strike=state.ce_strike, position_type=PositionType.CE, action=OrderAction.BUY, quantity=lot_quantity, price=ce_exit_price, order_id=order_ids["ce_exit"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
+            Trade(session_id=session_id, symbol=state.pe_symbol, strike=state.pe_strike, position_type=PositionType.PE, action=OrderAction.BUY, quantity=lot_quantity, price=pe_exit_price, order_id=order_ids["pe_exit"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
+            Trade(session_id=session_id, symbol=new_ce_symbol, strike=new_ce_strike, position_type=PositionType.CE, action=OrderAction.SELL, quantity=lot_quantity, price=new_ce_price, order_id=order_ids["ce_entry"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
+            Trade(session_id=session_id, symbol=new_pe_symbol, strike=new_pe_strike, position_type=PositionType.PE, action=OrderAction.SELL, quantity=lot_quantity, price=new_pe_price, order_id=order_ids["pe_entry"], is_adjustment=True, adjustment_reason=reason, paper_trade=not is_live),
         ]
         
         for trade in trades:
