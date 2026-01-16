@@ -744,6 +744,15 @@ async def get_spot_history(minutes: int = 60, session_id: str = None):
     # No historical data available - return empty
     return {"history": [], "is_live": False, "is_connected": False}
 
+@api_router.get("/market/nifty-lot-size")
+async def get_nifty_lot_size_api():
+    """Get current NIFTY lot size from Kite API"""
+    lot_size = await get_nifty_lot_size()
+    return {
+        "lot_size": lot_size,
+        "description": f"1 NIFTY lot = {lot_size} quantity"
+    }
+
 # Check Zerodha auth status
 @api_router.get("/auth/status")
 async def get_auth_status():
