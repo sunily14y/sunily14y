@@ -188,6 +188,27 @@ const DashboardPage = () => {
         </div>
       )}
 
+      {/* Disconnected Warning */}
+      {!isLiveData && (
+        <div className="flex items-center justify-between gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-sm">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <div>
+              <p className="font-medium text-amber-500">Not Connected to Zerodha</p>
+              <p className="text-sm text-muted-foreground">
+                Login with Zerodha to get live market data and start trading.
+              </p>
+            </div>
+          </div>
+          <a 
+            href="/login" 
+            className="px-4 py-2 bg-amber-500 text-black text-sm font-medium rounded hover:bg-amber-400 transition-colors"
+          >
+            Connect Zerodha
+          </a>
+        </div>
+      )}
+
       {/* Key Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* NIFTY Spot */}
