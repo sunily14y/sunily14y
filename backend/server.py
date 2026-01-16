@@ -188,6 +188,89 @@ def format_nifty_option_symbol(strike: int, option_type: str, expiry: str = None
     # Format: NIFTY25JAN2650CE
     return f"NIFTY{expiry}{strike}{option_type}"
 
+# Cache for NIFTY lot size (refreshed daily)
+_nifty_lot_size_cache = {"lot_size": None, "last_fetch": None}
+
+async def get_nifty_lot_size(kite: KiteConnect = None) -> int:
+    """
+    Get NIFTY 50 lot size from Kite API.
+    Lot size changes periodically, so we fetch it dynamically.
+    """
+    global _nifty_lot_size_cache
+    
+    # Check cache (valid for 1 day)
+    if _nifty_lot_size_cache["lot_size"] and _nifty_lot_size_cache["last_fetch"]:
+        cache_age = datetime.now() - _nifty_lot_size_cache["last_fetch"]
+        if cache_age.total_seconds() < 86400:  # 24 hours
+            return _nifty_lot_size_cache["lot_size"]
+    
+    # Try to fetch from Kite API
+    if kite:
+        try:
+            # Fetch NFO instruments
+            instruments = kite.instruments("NFO")
+            
+            # Find any NIFTY option to get lot size
+            for inst in instruments:
+                if inst.get("name") == "NIFTY" and inst.get("instrument_type") in ["CE", "PE"]:
+                    lot_size = inst.get("lot_size", 75)
+                    _nifty_lot_size_cache["lot_size"] = lot_size
+                    _nifty_lot_size_cache["last_fetch"] = datetime.now()
+                    logger.info(f"Fetched NIFTY lot size from Kite: {lot_size}")
+                    return lot_size
+        except Exception as e:
+            logger.warning(f"Failed to fetch lot size from Kite: {e}")
+    
+    # If no kite connection, try from any authenticated session
+    try:
+        auth_session = await db.sessions.find_one(
+            {"access_token": {"$exists": True, "$ne": None}},
+            {"_id": 0, "access_token": 1}
+        )
+        if auth_session:
+            k = get_kite_for_session(auth_session["access_token"])
+            instruments = k.instruments("NFO")
+            for inst in instruments:
+                if inst.get("name") == "NIFTY" and inst.get("instrument_type") in ["CE", "PE"]:
+                    lot_size = inst.get("lot_size", 75)
+                    _nifty_lot_size_cache["lot_size"] = lot_size
+                    _nifty_lot_size_cache["last_fetch"] = datetime.now()
+                    logger.info(f"Fetched NIFTY lot size from Kite (any session): {lot_size}")
+                    return lot_size
+    except Exception as e:
+        logger.warning(f"Failed to fetch lot size from any session: {e}")
+    
+    # Fallback to cached value or default (75 as of Jan 2025)
+    if _nifty_lot_size_cache["lot_size"]:
+        return _nifty_lot_size_cache["lot_size"]
+    
+    logger.warning("Using default NIFTY lot size: 75")
+    return 75  # Current NIFTY lot size as of 2025
+
+def get_nifty_lot_size_sync(kite: KiteConnect = None) -> int:
+    """Synchronous version for use in non-async contexts"""
+    global _nifty_lot_size_cache
+    
+    # Check cache
+    if _nifty_lot_size_cache["lot_size"] and _nifty_lot_size_cache["last_fetch"]:
+        cache_age = datetime.now() - _nifty_lot_size_cache["last_fetch"]
+        if cache_age.total_seconds() < 86400:
+            return _nifty_lot_size_cache["lot_size"]
+    
+    if kite:
+        try:
+            instruments = kite.instruments("NFO")
+            for inst in instruments:
+                if inst.get("name") == "NIFTY" and inst.get("instrument_type") in ["CE", "PE"]:
+                    lot_size = inst.get("lot_size", 75)
+                    _nifty_lot_size_cache["lot_size"] = lot_size
+                    _nifty_lot_size_cache["last_fetch"] = datetime.now()
+                    return lot_size
+        except Exception as e:
+            logger.warning(f"Sync: Failed to fetch lot size: {e}")
+    
+    return _nifty_lot_size_cache.get("lot_size") or 75
+
 # ====================== LIVE DATA ONLY (No Mock Data) ======================
 # All mock data functions have been removed.
 # The system now relies exclusively on live Zerodha data.
