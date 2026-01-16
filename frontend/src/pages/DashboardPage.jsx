@@ -58,12 +58,23 @@ const DashboardPage = () => {
   };
 
   const handleStartStrategy = async () => {
+    // Check if connected to live data
+    if (!isLiveData) {
+      toast.error("No live data available. Please login with Zerodha first.", {
+        description: "Go to Login page and connect your Zerodha account to get live market data.",
+        duration: 5000
+      });
+      return;
+    }
+    
     setIsStarting(true);
     try {
       await startStrategy();
       toast.success("Strategy started successfully!");
     } catch (error) {
-      toast.error("Failed to start strategy");
+      // Show the actual error message from backend
+      const errorMsg = error.response?.data?.detail || "Failed to start strategy";
+      toast.error(errorMsg);
     } finally {
       setIsStarting(false);
     }
