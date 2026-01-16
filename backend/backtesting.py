@@ -234,7 +234,11 @@ class BacktestEngine:
         self.entry_ce_premium: float = 0.0
         self.entry_pe_premium: float = 0.0
         self.realized_pnl: float = 0.0
-        self.lot_size: int = config.get("lot_size", 1) * 25  # NIFTY lot = 25
+        
+        # NIFTY lot size from config (fetched from Kite API, default 75)
+        self.nifty_lot_size: int = config.get("nifty_lot_size", 75)
+        self.lot_size: int = config.get("lot_size", 1) * self.nifty_lot_size
+        
         self.max_daily_loss: float = config.get("max_daily_loss") or 0  # 0 = disabled
         self.max_loss_triggered: bool = False
         
