@@ -911,18 +911,34 @@ async def get_nifty_lot_size_api():
 # Check Zerodha auth status
 @api_router.get("/auth/status")
 async def get_auth_status():
-    """Check if any session has valid Zerodha authentication"""
+    """Check if any session has valid Zerodha authentication - returns most recent"""
+    # Find the most recently authenticated session
     session = await db.sessions.find_one(
         {"access_token": {"$exists": True, "$ne": None}},
-        {"_id": 0, "zerodha_user_id": 1, "login_time": 1}
+        {"_id": 0, "zerodha_user_id": 1, "login_time": 1, "access_token": 1},
+        sort=[("login_time", -1)]  # Most recent first
     )
     if session:
+        # Verify token is still valid by checking if it's from today
+        login_time = session.get("login_time", "")
+        is_valid = True
+        if login_time:
+            try:
+                login_dt = datetime.fromisoformat(login_time.replace('Z', '+00:00'))
+                now = datetime.now(timezone.utc)
+                # Zerodha tokens expire at 6 AM IST next day, roughly check if > 18 hours old
+                hours_old = (now - login_dt).total_seconds() / 3600
+                is_valid = hours_old < 18
+            except Exception:
+                pass
+        
         return {
             "is_authenticated": True,
+            "is_token_valid": is_valid,
             "zerodha_user_id": session.get("zerodha_user_id"),
             "login_time": session.get("login_time")
         }
-    return {"is_authenticated": False}
+    return {"is_authenticated": False, "is_token_valid": False}
 
 # Strategy Management
 @api_router.post("/strategy/start")
