@@ -13,7 +13,8 @@ import {
   X,
   Bell,
   Activity,
-  Clock
+  Clock,
+  Grid3X3
 } from "lucide-react";
 import { Badge } from "../ui/badge";
 
