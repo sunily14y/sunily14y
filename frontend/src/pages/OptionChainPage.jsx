@@ -148,6 +148,11 @@ const OptionChainPage = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {optionsData?.is_connected && (
+            <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/30 animate-pulse">
+              LIVE
+            </Badge>
+          )}
           <Badge 
             variant="outline" 
             className={cn(
