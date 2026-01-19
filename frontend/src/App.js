@@ -8,6 +8,7 @@ import DashboardPage from "./pages/DashboardPage";
 import TradeHistoryPage from "./pages/TradeHistoryPage";
 import SettingsPage from "./pages/SettingsPage";
 import BacktestPage from "./pages/BacktestPage";
+import OptionChainPage from "./pages/OptionChainPage";
 import DashboardLayout from "./components/layout/DashboardLayout";
 
 // Component to handle auth callback
