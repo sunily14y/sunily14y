@@ -327,9 +327,11 @@ async def fetch_live_option_ltp(session_id: str, symbol: str) -> Optional[float]
 async def fetch_live_option_ltp_any_session(symbol: str) -> Optional[float]:
     """Fetch live option LTP using any authenticated session"""
     try:
+        # Get most recently authenticated session
         session = await db.sessions.find_one(
             {"access_token": {"$exists": True, "$ne": None}},
-            {"_id": 0}
+            {"_id": 0},
+            sort=[("login_time", -1)]
         )
         if session and session.get("access_token"):
             k = get_kite_for_session(session["access_token"])
