@@ -595,24 +595,30 @@ async def update_config(session_id: str, config: StrategyConfig):
 
 # Zerodha Auth
 @api_router.get("/auth/login-url")
-async def get_login_url(session_id: str):
-    """Get Zerodha login URL"""
-    if ZERODHA_API_KEY:
+async def get_zerodha_login_url(session_id: str):
+    """Get Zerodha login URL for OAuth"""
+    if ZERODHA_API_KEY and ZERODHA_API_SECRET:
         login_url = kite.login_url()
-        # Store session_id in database for callback lookup
-        await db.pending_auth.update_one(
-            {"session_id": session_id},
-            {"$set": {"session_id": session_id, "created_at": datetime.now(timezone.utc).isoformat()}},
-            upsert=True
-        )
+        
+        # Store pending auth in database to track the session
+        await db.pending_auth.delete_many({})  # Clear old pending auths
+        await db.pending_auth.insert_one({
+            "session_id": session_id,
+            "created_at": datetime.now(timezone.utc).isoformat()
+        })
+        
+        logger.info(f"Generated login URL for session {session_id}")
+        
         # Use state parameter to pass session_id
         return {"login_url": f"{login_url}&state={session_id}", "is_mock": False}
     else:
         return {"login_url": f"/callback?request_token=mock_token&session_id={session_id}", "is_mock": True}
 
 @api_router.get("/auth/callback")
-async def auth_callback(request_token: str, status: str = None, state: str = None, session_id: str = None):
+async def auth_callback(request_token: str = None, status: str = None, state: str = None, session_id: str = None, action: str = None):
     """Handle Zerodha OAuth callback"""
+    logger.info(f"Callback received: request_token={request_token[:20] if request_token else None}..., state={state}, session_id={session_id}, action={action}")
+    
     # Get session_id from state parameter or query parameter
     sid = state or session_id
     
@@ -621,37 +627,54 @@ async def auth_callback(request_token: str, status: str = None, state: str = Non
         pending = await db.pending_auth.find_one({}, sort=[("created_at", -1)])
         if pending:
             sid = pending.get("session_id")
+            logger.info(f"Using pending auth session: {sid}")
     
     if not sid:
         # Redirect to frontend with error
+        logger.error("No session_id found in callback")
         return RedirectResponse(url="https://zerotrades.preview.emergentagent.com/login?error=no_session")
     
     try:
         if ZERODHA_API_KEY and ZERODHA_API_SECRET and request_token and request_token != "mock_token":
             # Real Zerodha authentication
+            logger.info(f"Generating Zerodha session for {sid}")
             data = kite.generate_session(request_token, api_secret=ZERODHA_API_SECRET)
             
-            # Get current session to update config
-            session = await db.sessions.find_one({"id": sid}, {"_id": 0})
-            current_config = session.get("config", {}) if session else {}
-            current_config["trading_mode"] = "live"  # Auto-switch to live mode
+            access_token = data.get("access_token")
+            user_id = data.get("user_id")
             
-            await db.sessions.update_one(
+            logger.info(f"Got access token for user {user_id}")
+            
+            # Update the specific session
+            result = await db.sessions.update_one(
                 {"id": sid},
                 {"$set": {
                     "is_authenticated": True,
-                    "zerodha_user_id": data.get("user_id"),
-                    "access_token": data.get("access_token"),
+                    "zerodha_user_id": user_id,
+                    "access_token": access_token,
                     "public_token": data.get("public_token"),
                     "login_time": datetime.now(timezone.utc).isoformat(),
-                    "config": current_config
+                    "config.trading_mode": "live"
+                }}
+            )
+            
+            logger.info(f"Updated session {sid}: matched={result.matched_count}, modified={result.modified_count}")
+            
+            # Also update ALL sessions with this user's token (so any session can use it)
+            await db.sessions.update_many(
+                {"id": {"$ne": sid}},
+                {"$set": {
+                    "zerodha_user_id": user_id,
+                    "access_token": access_token,
+                    "public_token": data.get("public_token"),
+                    "login_time": datetime.now(timezone.utc).isoformat()
                 }}
             )
             
             # Clean up pending auth
-            await db.pending_auth.delete_one({"session_id": sid})
+            await db.pending_auth.delete_many({})
             
-            logger.info(f"Zerodha authentication successful for user {data.get('user_id')} - Live mode enabled")
+            logger.info(f"Zerodha authentication successful for user {user_id} - Live mode enabled")
             
             # Redirect to frontend dashboard with session
             return RedirectResponse(url=f"https://zerotrades.preview.emergentagent.com/dashboard?auth=success&session_id={sid}&mode=live")
@@ -669,6 +692,8 @@ async def auth_callback(request_token: str, status: str = None, state: str = Non
             
     except Exception as e:
         logger.error(f"Authentication failed: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return RedirectResponse(url=f"https://zerotrades.preview.emergentagent.com/login?error={str(e)}")
 
 @api_router.post("/auth/callback")
