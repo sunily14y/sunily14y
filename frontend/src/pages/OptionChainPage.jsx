@@ -8,11 +8,9 @@ import { cn } from "../lib/utils";
 import { 
   RefreshCw, 
   TrendingUp, 
-  TrendingDown,
-  ArrowUpRight,
-  ArrowDownRight,
   Activity,
-  Zap
+  Zap,
+  AlertCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import axios from "axios";
