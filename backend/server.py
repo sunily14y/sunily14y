@@ -173,19 +173,25 @@ async def get_session_kite(session_id: str) -> Optional[KiteConnect]:
     return None
 
 def get_nifty_weekly_expiry():
-    """Get current week's NIFTY expiry (Thursday)"""
+    """Get current week's NIFTY expiry (Thursday) in Zerodha format"""
     today = datetime.now()
     days_until_thursday = (3 - today.weekday()) % 7
     if days_until_thursday == 0 and today.hour >= 15:
         days_until_thursday = 7
     expiry = today + timedelta(days=days_until_thursday)
-    return expiry.strftime("%y%b%d").upper()  # e.g., "25JAN16"
+    
+    # Zerodha format: YY + Month Code + DD
+    # Month codes: 1-9 for Jan-Sep, O for Oct, N for Nov, D for Dec
+    month_codes = {1:'1', 2:'2', 3:'3', 4:'4', 5:'5', 6:'6', 
+                   7:'7', 8:'8', 9:'9', 10:'O', 11:'N', 12:'D'}
+    
+    return f"{expiry.strftime('%y')}{month_codes[expiry.month]}{expiry.strftime('%d')}"
 
 def format_nifty_option_symbol(strike: int, option_type: str, expiry: str = None):
-    """Format NIFTY option trading symbol"""
+    """Format NIFTY option trading symbol for Zerodha"""
     if not expiry:
         expiry = get_nifty_weekly_expiry()
-    # Format: NIFTY25JAN2650CE
+    # Format: NIFTY2612225500CE (YY+MonthCode+DD+Strike+Type)
     return f"NIFTY{expiry}{strike}{option_type}"
 
 # Cache for NIFTY lot size (refreshed daily)
