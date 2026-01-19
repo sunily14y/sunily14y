@@ -125,13 +125,9 @@ function AppContent() {
         <Route
           path="/option-chain"
           element={
-            sessionId ? (
-              <DashboardLayout>
-                <OptionChainPage />
-              </DashboardLayout>
-            ) : (
-              <Navigate to="/login" replace />
-            )
+            <DashboardLayout>
+              <OptionChainPage />
+            </DashboardLayout>
           }
         />
         <Route path="*" element={<Navigate to="/" replace />} />
