@@ -390,6 +390,7 @@ const OptionChainPage = () => {
               </tbody>
             </table>
           </ScrollArea>
+          )}
         </CardContent>
       </Card>
 
