@@ -128,10 +128,10 @@ const OptionChainPage = () => {
     return (
       <div className="flex items-center justify-center h-[60vh]">
         <Card className="bg-card border-border p-8">
-          <p className="text-muted-foreground">Please login to view option chain</p>
-          <Button className="mt-4" onClick={() => window.location.href = '/login'}>
-            Go to Login
-          </Button>
+          <div className="flex items-center gap-3">
+            <RefreshCw className="w-5 h-5 animate-spin" />
+            <p className="text-muted-foreground">Loading option chain...</p>
+          </div>
         </Card>
       </div>
     );
