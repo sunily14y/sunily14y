@@ -27,13 +27,28 @@ const OptionChainPage = () => {
   const [isPlacingOrder, setIsPlacingOrder] = useState({});
   const [tradingMode, setTradingMode] = useState("paper");
 
-  // Get session from localStorage
+  // Get session from localStorage or create one
   useEffect(() => {
-    const storedSession = localStorage.getItem('niftyalgo_session_id');
-    if (storedSession) {
+    const initSession = async () => {
+      let storedSession = localStorage.getItem('niftyalgo_session_id');
+      
+      if (!storedSession) {
+        // Create a new session
+        try {
+          const response = await axios.post(`${API_URL}/session/create`);
+          storedSession = response.data.session_id;
+          localStorage.setItem('niftyalgo_session_id', storedSession);
+        } catch (error) {
+          console.error("Failed to create session:", error);
+          return;
+        }
+      }
+      
       setSessionId(storedSession);
       fetchSessionConfig(storedSession);
-    }
+    };
+    
+    initSession();
   }, []);
 
   const fetchSessionConfig = async (sid) => {
