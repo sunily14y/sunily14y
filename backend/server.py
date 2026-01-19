@@ -701,7 +701,7 @@ async def get_nifty_spot(session_id: str = None):
 
 @api_router.get("/market/options-chain")
 async def get_options_chain(session_id: str = None):
-    """Get NIFTY options chain - LIVE DATA ONLY (returns empty if disconnected)"""
+    """Get NIFTY options chain with live LTP from Zerodha"""
     spot_price, is_live = await get_live_spot_price()
     
     if not is_live or spot_price == 0:
@@ -709,22 +709,171 @@ async def get_options_chain(session_id: str = None):
             "spot_price": 0,
             "atm_strike": 0,
             "chain": [],
+            "expiry": None,
+            "nifty_lot_size": 75,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "is_live": False,
             "is_connected": False
         }
     
     atm_strike = round(spot_price / 50) * 50
+    expiry = get_nifty_weekly_expiry()
+    nifty_lot_size = await get_nifty_lot_size()
     
-    # TODO: Fetch real options chain from Zerodha when available
-    # For now, return basic structure with spot price
+    # Generate strikes around ATM (10 strikes above and below)
+    strikes = [atm_strike + (i * 50) for i in range(-10, 11)]
+    
+    chain = []
+    
+    # Try to get Kite instance for fetching LTP
+    kite_instance = None
+    try:
+        # Find any authenticated session
+        auth_session = await db.sessions.find_one(
+            {"access_token": {"$exists": True, "$ne": None}},
+            {"_id": 0, "access_token": 1}
+        )
+        if auth_session:
+            kite_instance = get_kite_for_session(auth_session["access_token"])
+    except Exception as e:
+        logger.warning(f"Could not get Kite instance: {e}")
+    
+    for strike in strikes:
+        ce_symbol = format_nifty_option_symbol(strike, "CE", expiry)
+        pe_symbol = format_nifty_option_symbol(strike, "PE", expiry)
+        
+        ce_ltp = 0.0
+        pe_ltp = 0.0
+        
+        # Fetch live LTP if Kite is available
+        if kite_instance:
+            try:
+                # Get CE LTP
+                ce_ltp = await fetch_live_option_ltp_any_session(ce_symbol) or 0.0
+                pe_ltp = await fetch_live_option_ltp_any_session(pe_symbol) or 0.0
+            except Exception as e:
+                logger.warning(f"Failed to fetch LTP for {strike}: {e}")
+        
+        chain.append({
+            "strike": strike,
+            "ce_symbol": ce_symbol,
+            "pe_symbol": pe_symbol,
+            "ce_ltp": ce_ltp,
+            "pe_ltp": pe_ltp,
+            "is_atm": strike == atm_strike,
+            "is_itm_ce": strike < spot_price,
+            "is_itm_pe": strike > spot_price
+        })
+    
     return {
         "spot_price": spot_price,
         "atm_strike": atm_strike,
-        "chain": [],
+        "expiry": expiry,
+        "nifty_lot_size": nifty_lot_size,
+        "chain": chain,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "is_live": is_live,
         "is_connected": True
+    }
+
+@api_router.post("/orders/place")
+async def place_manual_order(
+    session_id: str,
+    symbol: str,
+    strike: int,
+    option_type: str,  # CE or PE
+    action: str,  # BUY or SELL
+    lots: int = 1
+):
+    """Place a manual order for options"""
+    session = await db.sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    config = StrategyConfig(**session.get("config", {}))
+    is_live = config.trading_mode == TradingMode.LIVE and session.get("access_token")
+    
+    # Get NIFTY lot size
+    nifty_lot_size = await get_nifty_lot_size()
+    quantity = lots * nifty_lot_size
+    
+    # Get current price
+    price = await fetch_live_option_ltp_any_session(symbol)
+    if not price:
+        raise HTTPException(status_code=503, detail="Cannot fetch option price. Please check Zerodha connection.")
+    
+    order_id = None
+    
+    if is_live:
+        try:
+            order_id = await place_live_order(session_id, symbol, action, quantity)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Order placement failed: {str(e)}")
+    
+    # Record the trade
+    trade = Trade(
+        session_id=session_id,
+        symbol=symbol,
+        strike=strike,
+        position_type=PositionType.CE if option_type == "CE" else PositionType.PE,
+        action=OrderAction.BUY if action == "BUY" else OrderAction.SELL,
+        quantity=quantity,
+        price=price,
+        order_id=order_id,
+        paper_trade=not is_live
+    )
+    
+    trade_doc = trade.model_dump()
+    trade_doc['timestamp'] = trade_doc['timestamp'].isoformat()
+    await db.trades.insert_one(trade_doc)
+    
+    # Update positions
+    existing_pos = await db.positions.find_one({
+        "session_id": session_id,
+        "symbol": symbol
+    }, {"_id": 0})
+    
+    if existing_pos:
+        new_qty = existing_pos.get("quantity", 0)
+        if action == "BUY":
+            new_qty += quantity
+        else:
+            new_qty -= quantity
+        
+        if new_qty == 0:
+            await db.positions.delete_one({"session_id": session_id, "symbol": symbol})
+        else:
+            await db.positions.update_one(
+                {"session_id": session_id, "symbol": symbol},
+                {"$set": {"quantity": new_qty, "current_price": price}}
+            )
+    else:
+        qty = quantity if action == "BUY" else -quantity
+        pos = Position(
+            session_id=session_id,
+            symbol=symbol,
+            strike=strike,
+            position_type=PositionType.CE if option_type == "CE" else PositionType.PE,
+            quantity=qty,
+            entry_price=price,
+            current_price=price
+        )
+        pos_doc = pos.model_dump()
+        pos_doc['created_at'] = pos_doc['created_at'].isoformat()
+        await db.positions.insert_one(pos_doc)
+    
+    return {
+        "success": True,
+        "order_id": order_id,
+        "symbol": symbol,
+        "strike": strike,
+        "option_type": option_type,
+        "action": action,
+        "lots": lots,
+        "quantity": quantity,
+        "price": price,
+        "is_live": is_live,
+        "message": f"{'LIVE' if is_live else 'PAPER'} Order: {action} {lots} lot(s) of {symbol} @ ₹{price}"
     }
 
 @api_router.get("/market/spot-history")
