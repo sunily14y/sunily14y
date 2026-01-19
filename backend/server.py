@@ -180,18 +180,16 @@ def get_nifty_weekly_expiry():
         days_until_thursday = 7
     expiry = today + timedelta(days=days_until_thursday)
     
-    # Zerodha format: YY + Month Code + DD
-    # Month codes: 1-9 for Jan-Sep, O for Oct, N for Nov, D for Dec
-    month_codes = {1:'1', 2:'2', 3:'3', 4:'4', 5:'5', 6:'6', 
-                   7:'7', 8:'8', 9:'9', 10:'O', 11:'N', 12:'D'}
-    
-    return f"{expiry.strftime('%y')}{month_codes[expiry.month]}{expiry.strftime('%d')}"
+    # Zerodha format: YYMMM (e.g., 26JAN for January 2026)
+    return expiry.strftime('%y%b').upper()
 
 def format_nifty_option_symbol(strike: int, option_type: str, expiry: str = None):
-    """Format NIFTY option trading symbol for Zerodha"""
+    """Format NIFTY option trading symbol for Zerodha
+    Example: NIFTY26JAN25500CE for Jan 2026, strike 25500, Call
+    """
     if not expiry:
         expiry = get_nifty_weekly_expiry()
-    # Format: NIFTY2612225500CE (YY+MonthCode+DD+Strike+Type)
+    # Format: NIFTY + YYMMM + Strike + Type
     return f"NIFTY{expiry}{strike}{option_type}"
 
 # Cache for NIFTY lot size (refreshed daily)
