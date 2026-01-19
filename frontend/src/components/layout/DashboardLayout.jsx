@@ -56,6 +56,11 @@ const DashboardLayout = ({ children }) => {
       icon: LayoutDashboard 
     },
     { 
+      path: '/option-chain', 
+      label: 'Option Chain', 
+      icon: Grid3X3 
+    },
+    { 
       path: '/backtest', 
       label: 'Backtest & Data', 
       icon: Clock 
