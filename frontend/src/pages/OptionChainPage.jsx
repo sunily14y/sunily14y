@@ -236,6 +236,22 @@ const OptionChainPage = () => {
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {isLoading && !optionsData ? (
+            <div className="flex items-center justify-center py-20">
+              <RefreshCw className="w-8 h-8 animate-spin text-primary" />
+              <span className="ml-3 text-muted-foreground">Loading option chain...</span>
+            </div>
+          ) : !optionsData?.chain?.length ? (
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+              <AlertCircle className="w-10 h-10 mb-3 opacity-50" />
+              <p className="font-medium">No option chain data available</p>
+              <p className="text-sm">Please check Zerodha connection</p>
+              <Button variant="outline" className="mt-4" onClick={fetchOptionsChain}>
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Retry
+              </Button>
+            </div>
+          ) : (
           <ScrollArea className="h-[500px]">
             <table className="w-full text-sm">
               <thead className="sticky top-0 bg-background z-10">
